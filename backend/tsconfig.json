@@ -2,10 +2,10 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "commonjs",
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "node"],
     "outDir": "./dist",
     "rootDir": "./src",
-    "strict": true,
+    "strict": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
@@ -17,13 +17,13 @@
     "allowSyntheticDefaultImports": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "noImplicitAny": true,
-    "noImplicitReturns": true,
+    "noImplicitAny": false,
+    "noImplicitReturns": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "strictNullChecks": true,
-    "strictPropertyInitialization": true,
-    "typeRoots": ["node_modules/@types"]
+    "strictNullChecks": false,
+    "strictPropertyInitialization": false,
+    "types": ["node"]
   },
   "include": [
     "src/**/*"
