@@ -4,6 +4,7 @@ import Job from '../models/job.model';
 import aiService from '../services/ai.service';
 import { asyncHandler, createError } from '../middlewares/error.middleware';
 import logger from '../utils/logger';
+import { ScoringService } from '../services/scoring.service';
 
 // Validation rules
 export const jobValidation = [
@@ -203,8 +204,7 @@ class JobController {
       return next(createError('Job not found', 404));
     }
 
-    // Import here to avoid circular dependency
-    const scoringService = (await import('../services/scoring.service')).default;
+    const scoringService = new ScoringService();
     const stats = await scoringService.getJobStatistics(jobId);
 
     res.status(200).json({
