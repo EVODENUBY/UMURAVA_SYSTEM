@@ -22,7 +22,8 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "strictNullChecks": false,
-    "strictPropertyInitialization": false
+    "strictPropertyInitialization": false,
+    "types": ["node"]
   },
   "include": [
     "src/**/*"
