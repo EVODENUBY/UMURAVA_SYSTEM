@@ -2,7 +2,7 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-gray-100 flex items-center justify-center">
       <h1 className="text-4xl font-bold text-blue-600">
-        WELCOME To AI POWERED RECRUITER PLATFORM
+        WELCOME To AI POWERED RECRUITER SY
       </h1>
     </main>
   );
