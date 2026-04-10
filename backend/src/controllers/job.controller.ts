@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { validationResult, body } from 'express-validator';
 import Job from '../models/job.model';
 import aiService from '../services/ai.service';
+import scoringService from '../services/scoring.service';
 import { asyncHandler, createError } from '../middlewares/error.middleware';
 import logger from '../utils/logger';
 
@@ -203,8 +204,7 @@ class JobController {
       return next(createError('Job not found', 404));
     }
 
-    // Import here to avoid circular dependency
-    const scoringService = (await import('../services/scoring.service')).default;
+    // Use scoring service
     const stats = await scoringService.getJobStatistics(jobId);
 
     res.status(200).json({

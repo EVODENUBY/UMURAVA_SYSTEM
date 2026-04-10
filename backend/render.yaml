@@ -1,0 +1,58 @@
+services:
+  # Backend API Service
+  - type: web
+    name: recruiter-ai-backend
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    nodeVersion: 20.12.0
+    
+    # Environment variables
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: MONGODB_URI
+        sync: false  # Set this in Render dashboard
+      - key: GEMINI_API_KEY
+        sync: false  # Set this in Render dashboard
+      - key: CORS_ORIGIN
+        value: https://localhost:3000
+      - key: UPLOAD_DIR
+        value: uploads
+      - key: MAX_FILE_SIZE
+        value: 10485760
+      - key: LOG_LEVEL
+        value: info
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+
+    # Build and deployment settings
+    buildFilter:
+      paths:
+        - src/**
+        - package.json
+        - package-lock.json
+        - tsconfig.json
+    
+    # Headers for security
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-XSS-Protection
+        value: 1; mode=block
+
+# Database service (MongoDB Atlas)
+databases:
+  - name: recruiter-ai-db
+    plan: free
+    databaseName: UMURAVA_DB
