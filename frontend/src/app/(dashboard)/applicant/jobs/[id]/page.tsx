@@ -277,7 +277,7 @@ export default function JobDetailPage() {
                   <div className="flex items-center gap-2 text-green-600 font-bold text-sm mb-2">
                     <Briefcase className="w-4 h-4" /> Job Details
                   </div>
-                  <p className="text-sm text-slate-600">Review the job requirements and apply if you're interested.</p>
+                  <p className="text-sm text-slate-600">Review the job requirements and apply if you&apos;re interested.</p>
                 </div>
 
                 <button 
