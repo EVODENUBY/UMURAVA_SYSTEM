@@ -1,22 +1,18 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import chatController from '../controllers/chat.controller';
 import { chatValidation } from '../controllers/chat.controller';
+import { protect } from '../middlewares/auth.middleware';
 
 const router = Router();
 
 /**
  * @swagger
- * tags:
- *   name: Chat
- *   description: AI-powered recruiter assistant and recommendations
- */
-
-/**
- * @swagger
- * /api/chat:
+ * /api/chat/message:
  *   post:
- *     summary: Send a message to the AI recruiter assistant
+ *     summary: Send message to AI chatbot
  *     tags: [Chat]
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -28,49 +24,33 @@ const router = Router();
  *             properties:
  *               message:
  *                 type: string
- *                 example: "Who are the top 3 candidates for this role?"
+ *                 description: Message to send to AI
  *               jobId:
  *                 type: string
  *                 description: Optional job context
- *                 example: "507f1f77bcf86cd799439011"
  *               applicantIds:
  *                 type: array
  *                 items:
  *                   type: string
- *                 description: Optional candidate context
- *               context:
- *                 type: object
- *                 description: Additional context for the AI
+ *                 description: Optional candidate IDs for context
  *     responses:
  *       200:
  *         description: AI response
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *                   properties:
- *                     message:
- *                       type: string
- *                     response:
- *                       type: string
- *                     context:
- *                       type: object
- *       404:
- *         description: Job not found
+ *       400:
+ *         description: Validation error
+ *       401:
+ *         description: Unauthorized
  */
-router.post('/', chatValidation, chatController.chat);
+router.post('/message', protect, chatValidation, chatController.chat);
 
 /**
  * @swagger
  * /api/chat/recommendations:
  *   post:
- *     summary: Get candidate recommendations
+ *     summary: Get candidate recommendations for a job
  *     tags: [Chat]
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -82,45 +62,27 @@ router.post('/', chatValidation, chatController.chat);
  *             properties:
  *               jobId:
  *                 type: string
- *                 example: "507f1f77bcf86cd799439011"
  *               criteria:
  *                 type: string
- *                 description: Recommendation criteria (overall, skills, experience, etc.)
- *                 example: "overall"
+ *                 description: Recommendation criteria (overall, skills, experience)
  *     responses:
  *       200:
  *         description: Candidate recommendations
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *                   properties:
- *                     jobId:
- *                       type: string
- *                     jobTitle:
- *                       type: string
- *                     criteria:
- *                       type: string
- *                     recommendation:
- *                       type: string
- *                     topCandidates:
- *                       type: array
+ *       401:
+ *         description: Unauthorized
  *       404:
- *         description: Job not found or no screened candidates
+ *         description: Job or candidates not found
  */
-router.post('/recommendations', chatController.getRecommendations);
+router.post('/recommendations', protect, chatController.getRecommendations);
 
 /**
  * @swagger
  * /api/chat/explain/{jobId}/{applicantId}:
  *   get:
- *     summary: Get AI explanation for a screening decision
+ *     summary: Get AI explanation for screening decision
  *     tags: [Chat]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: jobId
@@ -134,33 +96,13 @@ router.post('/recommendations', chatController.getRecommendations);
  *           type: string
  *     responses:
  *       200:
- *         description: Detailed explanation of screening decision
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *                   properties:
- *                     jobId:
- *                       type: string
- *                     applicantId:
- *                       type: string
- *                     applicantName:
- *                       type: string
- *                     score:
- *                       type: number
- *                     explanation:
- *                       type: string
- *                     reasoning:
- *                       type: string
+ *         description: Detailed explanation
+ *       401:
+ *         description: Unauthorized
  *       404:
- *         description: Job, applicant, or result not found
+ *         description: Not found
  */
-router.get('/explain/:jobId/:applicantId', chatController.explainDecision);
+router.get('/explain/:jobId/:applicantId', protect, chatController.explainDecision);
 
 /**
  * @swagger
@@ -168,6 +110,8 @@ router.get('/explain/:jobId/:applicantId', chatController.explainDecision);
  *   get:
  *     summary: Analyze job description for improvements
  *     tags: [Chat]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: jobId
@@ -176,27 +120,13 @@ router.get('/explain/:jobId/:applicantId', chatController.explainDecision);
  *           type: string
  *     responses:
  *       200:
- *         description: Job description analysis
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *                   properties:
- *                     jobId:
- *                       type: string
- *                     jobTitle:
- *                       type: string
- *                     analysis:
- *                       type: string
+ *         description: Job analysis
+ *       401:
+ *         description: Unauthorized
  *       404:
  *         description: Job not found
  */
-router.get('/analyze/:jobId', chatController.analyzeJob);
+router.get('/analyze/:jobId', protect, chatController.analyzeJob);
 
 /**
  * @swagger
@@ -204,6 +134,8 @@ router.get('/analyze/:jobId', chatController.analyzeJob);
  *   get:
  *     summary: Get suggested interview questions
  *     tags: [Chat]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: jobId
@@ -217,30 +149,102 @@ router.get('/analyze/:jobId', chatController.analyzeJob);
  *           type: string
  *     responses:
  *       200:
- *         description: Suggested interview questions
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *                   properties:
- *                     jobId:
- *                       type: string
- *                     jobTitle:
- *                       type: string
- *                     applicantId:
- *                       type: string
- *                     applicantName:
- *                       type: string
- *                     suggestedQuestions:
- *                       type: string
+ *         description: Interview questions
+ *       401:
+ *         description: Unauthorized
  *       404:
- *         description: Job or applicant not found
+ *         description: Not found
  */
-router.get('/questions/:jobId/:applicantId', chatController.suggestInterviewQuestions);
+router.get('/questions/:jobId/:applicantId', protect, chatController.suggestInterviewQuestions);
+
+/**
+ * @swagger
+ * /api/chat:
+ *   get:
+ *     summary: Get all chat sessions for current user
+ *     tags: [Chat]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of chat sessions
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/', protect, chatController.getChats);
+
+/**
+ * @swagger
+ * /api/chat/{chatId}:
+ *   get:
+ *     summary: Get specific chat with messages
+ *     tags: [Chat]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: chatId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Chat with messages
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Chat not found
+ */
+router.get('/:chatId', protect, chatController.getChatById);
+
+/**
+ * @swagger
+ * /api/chat:
+ *   post:
+ *     summary: Create new chat session
+ *     tags: [Chat]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title:
+ *                 type: string
+ *               jobId:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Chat created
+ *       401:
+ *         description: Unauthorized
+ */
+router.post('/', protect, chatController.createChat);
+
+/**
+ * @swagger
+ * /api/chat/{chatId}:
+ *   delete:
+ *     summary: Delete chat session
+ *     tags: [Chat]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: chatId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Chat deleted
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Chat not found
+ */
+router.delete('/:chatId', protect, chatController.deleteChat);
 
 export default router;

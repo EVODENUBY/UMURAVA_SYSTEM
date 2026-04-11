@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>🎯 AI Screening Test</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 900px; margin: 40px auto; padding: 20px; background: #f8fafc; }
+    h1 { color: #4F46E5; margin-bottom: 10px; }
+    .subtitle { color: #64748b; margin-bottom: 30px; }
+    .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    label { font-weight: 600; display: block; margin-bottom: 8px; }
+    select, input { width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 16px; margin-bottom: 20px; box-sizing: border-box; }
+    button { background: #4F46E5; color: white; padding: 14px 28px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 600; margin-right: 10px; }
+    button:hover { background: #4338ca; }
+    button:disabled { background: #94a3b8; cursor: not-allowed; }
+    #result { margin-top: 20px; padding: 20px; border-radius: 8px; display: none; }
+    #result.success { background: #f0fdf4; display: block; }
+    #result.error { background: #fef2f2; display: block; }
+    #result.loading { background: #fef9c3; display: block; }
+    .stat { display: inline-block; margin-right: 30px; }
+    .stat-value { font-size: 28px; font-weight: 700; }
+    .stat-label { font-size: 14px; color: #64748b; }
+    .stat.shortlisted .stat-value { color: #10B981; }
+    .stat.rejected .stat-value { color: #EF4444; }
+    .stat.pending .stat-value { color: #F59E0B; }
+    .note { font-size: 14px; color: #64748b; margin-top: 20px; }
+    a { color: #4F46E5; }
+    .auth-box { background: #fef3c7; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #fcd34d; }
+  </style>
+</head>
+<body>
+  <h1>🎯 AI Screening Test</h1>
+  <p class="subtitle">Select a job and run AI screening on all applicants automatically</p>
+  
+  <div class="auth-box">
+    <label>🔐 Authentication Token:</label>
+    <input type="text" id="tokenInput" placeholder="Paste your JWT token here">
+    <button type="button" id="loadJobsBtn">🔄 Load Jobs</button>
+  </div>
+  
+  <div class="card">
+    <label>Select Job to Screen:</label>
+    <select id="jobSelect">
+      <option value="">-- Load jobs first --</option>
+    </select>
+    <p style="font-size: 13px; color: #64748b;">Request body: <code>{"jobId": "SELECTED_JOB_ID", "threshold": 0}</code></p>
+    <button type="button" id="runBtn" disabled>▶ Run AI Screening</button>
+  </div>
+  
+  <div id="result"></div>
+  
+  <p class="note">
+    <a href="/api-docs">📚 API Docs</a> | 
+    <a href="/">🏠 Home</a>
+  </p>
+
+  <script>
+    (function() {
+      var API_URL = window.location.origin;
+      var jobs = [];
+      
+      var loadJobsBtn = document.getElementById('loadJobsBtn');
+      var runBtn = document.getElementById('runBtn');
+      var jobSelect = document.getElementById('jobSelect');
+      var tokenInput = document.getElementById('tokenInput');
+      var result = document.getElementById('result');
+      
+      loadJobsBtn.addEventListener('click', loadJobs);
+      jobSelect.addEventListener('change', updateJobInfo);
+      runBtn.addEventListener('click', runScreening);
+      
+      function loadJobs() {
+        var token = tokenInput.value.trim();
+        
+        if (!token) {
+          result.className = 'error';
+          result.innerHTML = '<h3>No Token</h3><p>Please enter your JWT token first. Login at /login to get one.</p>';
+          return;
+        }
+        
+        result.className = 'loading';
+        result.innerHTML = '<h3>Loading jobs...</h3>';
+        
+        fetch(API_URL + '/api/jobs/all?status=all', {
+          headers: { 
+            'Authorization': 'Bearer ' + token
+          }
+        })
+        .then(function(res) { 
+          if (!res.ok) {
+            throw new Error('Failed to load jobs. Status: ' + res.status);
+          }
+          return res.json(); 
+        })
+        .then(function(data) {
+          if (!data.success) {
+            result.className = 'error';
+            result.innerHTML = '<h3>Error</h3><p>' + (data.error?.message || 'Unknown error') + '</p>';
+            return;
+          }
+          jobs = data.data ? data.data.jobs || [] : [];
+          
+          if (jobs.length === 0) {
+            result.className = 'error';
+            result.innerHTML = '<h3>No Jobs Found</h3><p>Create a job first at /api/jobs (POST)</p>';
+            return;
+          }
+          
+          jobSelect.innerHTML = '<option value="">-- Select a job --</option>';
+          
+          for (var i = 0; i < jobs.length; i++) {
+            jobSelect.innerHTML += '<option value="' + jobs[i]._id + '">' + jobs[i].title + '</option>';
+          }
+          
+          result.className = 'success';
+          result.innerHTML = '<h3>Loaded ' + jobs.length + ' jobs!</h3><p>Now select a job and click "Run AI Screening"</p>';
+        })
+        .catch(function(e) {
+          result.className = 'error';
+          result.innerHTML = '<h3>Error</h3><p>' + e.message + '</p>';
+        });
+      }
+      
+      function updateJobInfo() {
+        runBtn.disabled = !jobSelect.value;
+      }
+      
+      function runScreening() {
+        var jobId = jobSelect.value;
+        var token = tokenInput.value.trim();
+        
+        if (!jobId) { alert('Please select a job'); return; }
+        if (!token) { 
+          result.className = 'error';
+          result.innerHTML = '<h3>No Token</h3><p>Please enter your JWT token first.</p>';
+          return; 
+        }
+        
+        runBtn.disabled = true;
+        runBtn.textContent = 'Running AI Screening...';
+        result.className = 'loading';
+        result.innerHTML = '<h3>Processing with AI...</h3><p>Analyzing candidates, this may take a moment...</p>';
+        
+        fetch(API_URL + '/api/screening/run', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+          },
+          body: JSON.stringify({ 
+            jobId: jobId,
+            threshold: 50
+          })
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.success) {
+            var stats = data.data.statistics || {};
+            var allRankings = data.data.allRankings || [];
+            var biasAlerts = data.data.biasAlerts || [];
+            
+            var html = '<h3>Screening Complete!</h3>' +
+              '<p><strong>Job:</strong> ' + (data.data.jobTitle || jobId) + '</p>' +
+              '<p><strong>Total Evaluated:</strong> ' + data.data.totalEvaluated + '</p>' +
+              '<div class="stat"><div class="stat-value">' + stats.averageScore + '</div><div class="stat-label">Avg Score</div></div>' +
+              '<div class="stat"><div class="stat-value">' + stats.highestScore + '</div><div class="stat-label">Highest</div></div>' +
+              '<div class="stat shortlisted"><div class="stat-value">' + stats.shortlisted + '</div><div class="stat-label">Shortlisted</div></div>' +
+              '<div class="stat rejected"><div class="stat-value">' + stats.rejected + '</div><div class="stat-label">Rejected</div></div>' +
+              '<div class="stat pending"><div class="stat-value">' + stats.pending + '</div><div class="stat-label">Pending</div></div>';
+            
+            if (allRankings.length > 0) {
+              html += '<h4>All Candidates (Ranked)</h4><table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:12px;">' +
+                '<tr style="background:#f1f5f9;"><th>#</th><th>Name</th><th>Score</th><th>Status</th><th>Recommendation</th></tr>';
+              for (var i = 0; i < allRankings.length; i++) {
+                var c = allRankings[i];
+                var bg = i % 2 === 0 ? '#fff' : '#f9fafb';
+                var statusColor = c.status === 'shortlisted' ? 'green' : c.status === 'rejected' ? 'red' : '#64748b';
+                html += '<tr style="background:' + bg + ';">' +
+                  '<td style="padding:6px;">' + c.ranking + '</td>' +
+                  '<td style="padding:6px;">' + (c.name || c.candidateId) + '</td>' +
+                  '<td style="padding:6px;"><strong>' + c.score + '</strong></td>' +
+                  '<td style="padding:6px;color:' + statusColor + ';">' + c.status + '</td>' +
+                  '<td style="padding:6px;">' + (c.recommendation || '-') + '</td>' +
+                '</tr>';
+              }
+              html += '</table>';
+            }
+            
+            if (biasAlerts.length > 0) {
+              html += '<h4>Bias Alerts (' + biasAlerts.length + ')</h4>';
+              for (var j = 0; j < biasAlerts.length; j++) {
+                var alert = biasAlerts[j];
+                html += '<div style="background:#fffbeb;border-left:3px solid #f59e0b;padding:10px;margin:5px 0;">' +
+                  '<strong>[' + alert.severity.toUpperCase() + '] ' + alert.type + '</strong>: ' + alert.description + 
+                  '<br><small>Suggestion: ' + alert.suggestion + '</small></div>';
+              }
+            }
+            
+            result.className = 'success';
+            result.innerHTML = html;
+          } else {
+            result.className = 'error';
+            result.innerHTML = '<h3>Error</h3><p>' + (data.error ? data.error.message : 'Unknown error') + '</p>';
+          }
+        })
+        .catch(function(e) {
+          result.className = 'error';
+          result.innerHTML = '<h3>Error</h3><p>' + e.message + '</p>';
+        })
+        .finally(function() {
+          runBtn.disabled = false;
+          runBtn.textContent = '▶ Run AI Screening';
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

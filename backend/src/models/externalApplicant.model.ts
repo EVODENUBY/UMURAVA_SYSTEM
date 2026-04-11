@@ -1,10 +1,6 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema, Types } from 'mongoose';
 
-/**
- * @deprecated Use InternalApplicant or ExternalApplicant instead
- * This model is kept for backward compatibility with screening system
- */
-export interface IApplicant extends Document {
+export interface IExternalApplicant extends Document {
   name: string;
   email: string;
   phone?: string;
@@ -26,12 +22,15 @@ export interface IApplicant extends Document {
   }>;
   resumeText: string;
   resumeFilePath?: string;
-  source: 'pdf' | 'csv' | 'manual';
+  resumeLink?: string;
+  source: 'pdf' | 'csv' | 'excel' | 'link' | 'manual';
+  jobId?: Types.ObjectId;
+  status: 'screening' | 'interview' | 'offer' | 'hired' | 'rejected';
   createdAt: Date;
   updatedAt: Date;
 }
 
-const ApplicantSchema: Schema = new Schema(
+const ExternalApplicantSchema: Schema = new Schema(
   {
     name: {
       type: String,
@@ -54,6 +53,13 @@ const ApplicantSchema: Schema = new Schema(
       type: [String],
       default: []
     },
+    skillDetails: [
+      {
+        name: { type: String, required: true },
+        level: { type: String, default: 'Intermediate' },
+        yearsOfExperience: { type: Number, default: 0 }
+      }
+    ],
     experience: {
       years: {
         type: Number,
@@ -80,18 +86,35 @@ const ApplicantSchema: Schema = new Schema(
         field: { type: String }
       }
     ],
+    languages: [
+      {
+        name: { type: String, required: true },
+        proficiency: { type: String, default: 'Fluent' }
+      }
+    ],
     resumeText: {
       type: String,
-      required: [true, 'Resume text is required'],
       trim: true
     },
     resumeFilePath: {
       type: String
     },
+    resumeLink: {
+      type: String
+    },
     source: {
       type: String,
-      enum: ['pdf', 'csv', 'manual'],
+      enum: ['pdf', 'csv', 'excel', 'link', 'manual'],
       default: 'manual'
+    },
+    jobId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Job'
+    },
+    status: {
+      type: String,
+      enum: ['screening', 'interview', 'offer', 'hired', 'rejected'],
+      default: 'screening'
     }
   },
   {
@@ -101,9 +124,9 @@ const ApplicantSchema: Schema = new Schema(
   }
 );
 
-// Indexes for search optimization
-ApplicantSchema.index({ name: 'text', resumeText: 'text' });
-ApplicantSchema.index({ skills: 1 });
-ApplicantSchema.index({ email: 1 }, { unique: true });
+ExternalApplicantSchema.index({ name: 'text', resumeText: 'text' });
+ExternalApplicantSchema.index({ skills: 1 });
+ExternalApplicantSchema.index({ email: 1 });
+ExternalApplicantSchema.index({ jobId: 1, status: 1 });
 
-export default mongoose.model<IApplicant>('Applicant', ApplicantSchema);
+export default mongoose.model<IExternalApplicant>('ExternalApplicant', ExternalApplicantSchema);

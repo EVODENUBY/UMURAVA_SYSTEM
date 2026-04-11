@@ -4,6 +4,8 @@ import mongoose from 'mongoose';
 import Job from '../models/job.model';
 import Applicant from '../models/applicant.model';
 import Result from '../models/result.model';
+import Chat from '../models/chat.model';
+import Message from '../models/message.model';
 import aiService from '../services/ai.service';
 import { asyncHandler, createError } from '../middlewares/error.middleware';
 import logger from '../utils/logger';
@@ -132,7 +134,7 @@ class ChatController {
 
 Job: ${job.title}
 Required Skills: ${job.requiredSkills.join(', ')}
-Experience: ${job.experience.minYears}+ years (${job.experience.level})
+Experience: ${job.experience || 'Not specified'}
 
 Top Candidates:
 ${results.map((r, i) => `
@@ -250,7 +252,7 @@ Provide a clear, conversational explanation covering:
 Job Title: ${job.title}
 Description: ${job.description}
 Required Skills: ${job.requiredSkills.join(', ')}
-Experience: ${job.experience.minYears}+ years
+Experience: ${job.experience || 'Not specified'}
 Education: ${job.education.map(e => `${e.degree}${e.field ? ` in ${e.field}` : ''}`).join(', ')}
 
 Provide specific, actionable suggestions.`;
@@ -328,6 +330,89 @@ Provide:
         applicantName: applicant.name,
         suggestedQuestions: questions
       }
+    });
+  });
+
+  getChats = asyncHandler(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return next(createError('Unauthorized', 401));
+    }
+
+    const chats = await Chat.find({ userId, isActive: true })
+      .sort({ updatedAt: -1 })
+      .populate('jobId', 'title');
+
+    res.status(200).json({
+      success: true,
+      data: chats
+    });
+  });
+
+  getChatById = asyncHandler(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const { chatId } = req.params;
+    const userId = (req as any).user?.id;
+
+    if (!mongoose.isValidObjectId(chatId)) {
+      return next(createError('Invalid chat ID', 400));
+    }
+
+    const chat = await Chat.findOne({ _id: chatId, userId, isActive: true })
+      .populate('jobId', 'title');
+
+    if (!chat) {
+      return next(createError('Chat not found', 404));
+    }
+
+    const messages = await Message.find({ chatId }).sort({ createdAt: 1 });
+
+    res.status(200).json({
+      success: true,
+      data: { chat, messages }
+    });
+  });
+
+  createChat = asyncHandler(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return next(createError('Unauthorized', 401));
+    }
+
+    const { title, jobId } = req.body;
+
+    const chat = await Chat.create({
+      userId,
+      title: title || 'New Conversation',
+      jobId
+    });
+
+    res.status(201).json({
+      success: true,
+      data: chat
+    });
+  });
+
+  deleteChat = asyncHandler(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const { chatId } = req.params;
+    const userId = (req as any).user?.id;
+
+    if (!mongoose.isValidObjectId(chatId)) {
+      return next(createError('Invalid chat ID', 400));
+    }
+
+    const chat = await Chat.findOneAndUpdate(
+      { _id: chatId, userId },
+      { isActive: false },
+      { new: true }
+    );
+
+    if (!chat) {
+      return next(createError('Chat not found', 404));
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Chat deleted successfully'
     });
   });
 }

@@ -19,7 +19,7 @@ export interface EvaluationResult {
 }
 
 export interface BiasDetectionResult {
-  type: 'gender' | 'experience' | 'education' | 'exclusionary' | 'other';
+  type: 'gender' | 'experience' | 'education' | 'exclusionary' | 'age' | 'other';
   severity: 'low' | 'medium' | 'high';
   description: string;
   suggestion: string;

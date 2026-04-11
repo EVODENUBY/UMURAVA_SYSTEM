@@ -1,5 +1,6 @@
 import pdf from 'pdf-parse';
 import { parse } from 'csv-parse/sync';
+import * as XLSX from 'xlsx';
 import logger from '../utils/logger';
 
 export interface ParsedResume {
@@ -16,8 +17,12 @@ export interface ParsedCSVRecord {
   phone?: string;
   skills: string;
   experience: string;
-  education: string;
+  education?: string;
   resumeText?: string;
+  resumeLink?: string;
+  currentRole?: string;
+  institution?: string;
+  graduationYear?: string;
   [key: string]: string | undefined;
 }
 
@@ -120,13 +125,17 @@ export class ParserService {
   private normalizeCSVRecord(record: Record<string, string>): ParsedCSVRecord {
     // Map common column names to our standard fields
     const fieldMappings: Record<string, string[]> = {
-      name: ['name', 'full_name', 'fullname', 'candidate_name', 'applicant_name', 'first_name', 'last_name'],
+      name: ['name', 'full_name', 'fullname', 'candidate_name', 'applicant_name', 'first_name', 'last_name', 'firstname', 'lastname', 'full name'],
       email: ['email', 'email_address', 'e-mail', 'mail', 'contact_email'],
       phone: ['phone', 'phone_number', 'mobile', 'contact_number', 'telephone'],
       skills: ['skills', 'skill_set', 'technical_skills', 'key_skills', 'competencies'],
-      experience: ['experience', 'work_experience', 'professional_experience', 'years_of_experience', 'total_experience'],
+      experience: ['experience', 'work_experience', 'professional_experience', 'years_of_experience', 'total_experience', 'experienceyears'],
       education: ['education', 'qualification', 'degree', 'academic_background', 'highest_education'],
-      resumeText: ['resume', 'cv', 'profile', 'summary', 'about', 'description', 'bio']
+      resumeText: ['resume', 'cv', 'profile', 'summary', 'about', 'description', 'bio'],
+      resumeLink: ['resumelink', 'resume_link', 'linkedin', 'linkedin_url', 'portfoliolink', 'portfolio_link'],
+      currentRole: ['currentrole', 'current_role', 'currentrole', 'title', 'jobtitle'],
+      institution: ['institution', 'school', 'university', 'college'],
+      graduationYear: ['graduationyear', 'graduation_year', 'year', 'graduation', 'passout']
     };
 
     const normalized: ParsedCSVRecord = {
@@ -134,7 +143,11 @@ export class ParserService {
       email: '',
       skills: '',
       experience: '',
-      education: ''
+      education: '',
+      resumeLink: '',
+      currentRole: '',
+      institution: '',
+      graduationYear: ''
     };
 
     // Normalize keys to lowercase and trim
@@ -182,6 +195,13 @@ export class ParserService {
       }
     }
 
+    // Combine firstname and lastname if available
+    if (!normalized.name && (lowerRecord['firstname'] || lowerRecord['lastname'])) {
+      const firstName = lowerRecord['firstname'] || '';
+      const lastName = lowerRecord['lastname'] || '';
+      normalized.name = `${firstName} ${lastName}`.trim();
+    }
+
     return normalized;
   }
 
@@ -220,10 +240,19 @@ export class ParserService {
   /**
    * Detect file type from buffer
    */
-  detectFileType(buffer: Buffer): 'pdf' | 'csv' | 'unknown' {
+  detectFileType(buffer: Buffer): 'pdf' | 'csv' | 'excel' | 'unknown' {
     // PDF magic number: %PDF
     if (buffer.length > 4 && buffer.slice(0, 4).toString() === '%PDF') {
       return 'pdf';
+    }
+
+    // Excel detection - check for Excel magic numbers
+    // Excel files start with PK (zip format) or D0 CF (old xls format)
+    if (buffer.length > 8) {
+      const header = buffer.slice(0, 8).toString('hex');
+      if (header.startsWith('504b') || header.startsWith('d0cf')) { // PK (zip) or old Excel
+        return 'excel';
+      }
     }
 
     // CSV detection - check for common CSV characteristics
@@ -240,10 +269,63 @@ export class ParserService {
   }
 
   /**
+   * Parse Excel file buffer containing applicant data
+   */
+  parseExcel(buffer: Buffer): CSVParseResult {
+    try {
+      logger.info('Parsing Excel file', { bufferSize: buffer.length });
+
+      const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
+      
+      const results: ParsedCSVRecord[] = [];
+      const errors: Array<{ row: number; error: string }> = [];
+
+      // Get first sheet
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      
+      // Convert to JSON
+      const rawData = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { 
+        defval: '',
+        raw: false,
+        dateNF: 'yyyy-mm-dd'
+      });
+
+      rawData.forEach((record, index) => {
+        try {
+          const normalizedRecord = this.normalizeCSVRecord(record as Record<string, string>);
+          results.push(normalizedRecord);
+        } catch (error) {
+          errors.push({
+            row: index + 2,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
+        }
+      });
+
+      logger.info('Excel parsed successfully', { 
+        totalRows: rawData.length, 
+        successfulParses: results.length,
+        errors: errors.length 
+      });
+
+      return {
+        records: results,
+        totalRows: rawData.length,
+        successfulParses: results.length,
+        errors
+      };
+    } catch (error) {
+      logger.error('Error parsing Excel:', error);
+      throw new Error(`Excel parsing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
    * Parse file based on detected type
    */
   async parseFile(buffer: Buffer, mimetype: string): Promise<{
-    type: 'pdf' | 'csv';
+    type: 'pdf' | 'csv' | 'excel';
     data: ParsedResume | CSVParseResult;
   }> {
     const detectedType = this.detectFileType(buffer);
@@ -251,6 +333,13 @@ export class ParserService {
     if (detectedType === 'pdf' || mimetype === 'application/pdf') {
       const data = await this.parsePDF(buffer);
       return { type: 'pdf', data };
+    }
+
+    if (detectedType === 'excel' || 
+        mimetype === 'application/vnd.ms-excel' || 
+        mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+      const data = this.parseExcel(buffer);
+      return { type: 'excel', data };
     }
 
     if (detectedType === 'csv' || mimetype === 'text/csv' || mimetype === 'application/csv') {
