@@ -9,7 +9,6 @@ import {
   Menu, 
   X, 
   Search,
-  Globe,
   Code2,
   UserCheck,
   Handshake,
@@ -292,36 +291,15 @@ export default function LandingPage() {
             <Link href="/login" className="px-6 py-2.5 rounded-xl border-2 transition-all hover:shadow-md" style={{ borderColor: BRAND_COLOR, color: BRAND_COLOR }}>{t.signIn}</Link>
           </div>
           <div className="hidden md:flex items-center gap-2">
-            <div className="relative">
-              <button 
-                onClick={() => setIsLangOpen(!isLangOpen)}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-all"
-              >
-                <Globe className="w-4 h-4" />
-                <span className="font-medium uppercase">{language}</span>
-              </button>
-              {isLangOpen && (
-                <motion.div 
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="absolute top-full right-0 mt-2 bg-white rounded-xl shadow-xl border border-slate-200 py-2 min-w-[140px] overflow-hidden"
-                >
-                  {[
-                    { code: 'en', label: 'English' },
-                    { code: 'fr', label: 'Français' },
-                    { code: 'rw', label: 'Kinyarwanda' },
-                  ].map((lang) => (
-                    <button
-                      key={lang.code}
-                      onClick={() => { setLanguage(lang.code as Language); setIsLangOpen(false); }}
-                      className={`w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 transition-colors ${language === lang.code ? 'text-blue-500 font-semibold bg-blue-50' : 'text-slate-600'}`}
-                    >
-                      {lang.label}
-                    </button>
-                  ))}
-                </motion.div>
-              )}
-            </div>
+            <select 
+              value={language}
+              onChange={(e) => setLanguage(e.target.value as Language)}
+              className="px-3 py-2 rounded-lg text-sm text-slate-500 bg-white border border-slate-200 hover:bg-slate-50 transition-all cursor-pointer"
+            >
+              <option value="en">English</option>
+              <option value="fr">Français</option>
+              <option value="rw">Kinyarwanda</option>
+            </select>
           </div>
           <button 
             onClick={() => setIsMenuOpen(true)}
