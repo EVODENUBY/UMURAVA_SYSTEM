@@ -1,7 +1,7 @@
 import mongoose, { Document, Schema, Types } from 'mongoose';
 
 export interface IBiasAlert {
-  type: 'gender' | 'experience' | 'education' | 'exclusionary' | 'other';
+  type: 'gender' | 'experience' | 'experience_requirement' | 'education' | 'education_requirement' | 'exclusionary' | 'age' | 'assessment_data' | 'data_limitation' | 'data_quality_or_generic_resume' | 'data_completeness' | 'geographic_location' | 'resume_detail' | 'language' | 'other';
   severity: 'low' | 'medium' | 'high';
   description: string;
   suggestion: string;
@@ -30,7 +30,7 @@ export interface IResult extends Document {
 const BiasAlertSchema: Schema = new Schema({
   type: {
     type: String,
-    enum: ['gender', 'experience', 'education', 'exclusionary', 'other'],
+    enum: ['gender', 'experience', 'experience_requirement', 'education', 'education_requirement', 'exclusionary', 'age', 'assessment_data', 'data_limitation', 'data_quality_or_generic_resume', 'data_completeness', 'geographic_location', 'resume_detail', 'language', 'other'],
     required: true
   },
   severity: {

@@ -38,15 +38,15 @@ export class ScoringService {
     // Sort by score descending
     const sortedEvaluations = [...evaluations].sort((a, b) => b.score - a.score);
 
-    // Filter by threshold and limit to topN
-    let filteredEvaluations = sortedEvaluations.filter(e => e.score >= threshold);
+    // Don't filter by threshold - rank ALL candidates
+    let filteredEvaluations = sortedEvaluations;
     
     if (topN && topN > 0) {
       filteredEvaluations = filteredEvaluations.slice(0, topN);
     }
 
-    // Assign rankings and status
-    const ranked: RankedCandidate[] = filteredEvaluations.map((evaluation, index) => {
+    // Assign rankings and status to ALL candidates
+    const ranked: RankedCandidate[] = sortedEvaluations.map((evaluation, index) => {
       let status: 'shortlisted' | 'rejected' | 'interview' | 'pending' = 'pending';
 
       if (autoShortlist) {
@@ -54,6 +54,8 @@ export class ScoringService {
           status = 'shortlisted';
         } else if (evaluation.score < threshold) {
           status = 'rejected';
+        } else {
+          status = 'pending';
         }
       }
 

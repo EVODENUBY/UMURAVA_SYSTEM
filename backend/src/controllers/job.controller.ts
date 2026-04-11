@@ -10,22 +10,22 @@ import logger from '../utils/logger';
 export const jobValidation = [
   body('title').notEmpty().withMessage('Job title is required'),
   body('description').notEmpty().withMessage('Job description is required'),
-  body('requiredSkills').isArray({ min: 1 }).withMessage('At least one skill is required'),
-  body('experience.minYears').isInt({ min: 0 }).withMessage('Minimum years must be a non-negative integer'),
-  body('experience.level').isIn(['entry', 'mid', 'senior', 'executive']).withMessage('Invalid experience level'),
-  body('education').isArray({ min: 1 }).withMessage('At least one education requirement is required'),
-  body('education.*.degree').notEmpty().withMessage('Education degree is required')
+  body('requiredSkills').isArray({ min: 1 }).withMessage('At least one skill is required')
 ];
 
 class JobController {
   /**
-   * Create a new job posting
+   * Create a new job posting (recruiter/admin only)
    */
   createJob = asyncHandler(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    // Check validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return next(createError(errors.array()[0].msg, 400));
+    }
+
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return next(createError('Unauthorized', 401));
     }
 
     const {
@@ -35,19 +35,38 @@ class JobController {
       experience,
       education,
       location,
-      salary
+      salary,
+      status,
+      applicationDeadline,
+      expirationDate
     } = req.body;
 
     logger.info('Creating new job', { title });
 
+    const jobStatus = status || 'draft';
+    const postedDate = jobStatus === 'published' ? new Date() : undefined;
+
     const job = await Job.create({
       title,
       description,
+      employmentType: req.body.employmentType,
+      jobLevel: req.body.jobLevel,
       requiredSkills,
+      responsibilities: req.body.responsibilities,
       experience,
-      education,
-      location,
-      salary
+      education: req.body.education || [],
+      certifications: req.body.certifications || [],
+      languages: req.body.languages || [],
+      location: req.body.location,
+      salary: req.body.salary ?? null,
+      benefits: req.body.benefits || [],
+      applicationProcess: req.body.applicationProcess,
+      tags: req.body.tags || [],
+      createdBy: userId,
+      status: jobStatus,
+      applicationDeadline,
+      expirationDate,
+      postedDate
     });
 
     logger.info('Job created successfully', { jobId: job._id });
@@ -59,7 +78,7 @@ class JobController {
   });
 
   /**
-   * Get all jobs with pagination and search
+   * Get all published jobs with pagination and search (public - no auth required)
    */
   listJobs = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const page = parseInt(req.query.page as string) || 1;
@@ -67,15 +86,62 @@ class JobController {
     const search = req.query.search as string;
     const skip = (page - 1) * limit;
 
-    // Build query
-    let query = {};
+    // Only show published jobs to public (exclude analytics)
+    let query: any = { status: 'published' };
     if (search) {
-      query = {
-        $or: [
-          { title: { $regex: search, $options: 'i' } },
-          { description: { $regex: search, $options: 'i' } }
-        ]
-      };
+      query.$and = [
+        { status: 'published' },
+        {
+          $or: [
+            { title: { $regex: search, $options: 'i' } },
+            { description: { $regex: search, $options: 'i' } },
+            { tags: { $regex: search, $options: 'i' } }
+          ]
+        }
+      ];
+    }
+
+    const [jobs, total] = await Promise.all([
+      Job.find(query)
+        .select('-analytics')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .exec(),
+      Job.countDocuments(query)
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        jobs,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit)
+        }
+      }
+    });
+  });
+
+  /**
+   * Get all jobs for recruiter/admin (includes drafts)
+   */
+  listAllJobs = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const search = req.query.search as string;
+    const status = req.query.status as string;
+    const skip = (page - 1) * limit;
+
+    let query: any = {};
+    if (status) query.status = status;
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ];
     }
 
     const [jobs, total] = await Promise.all([
@@ -102,12 +168,12 @@ class JobController {
   });
 
   /**
-   * Get a single job by ID
+   * Get a single job by ID (public - exclude analytics)
    */
   getJobById = asyncHandler(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { id } = req.params;
 
-    const job = await Job.findById(id);
+    const job = await Job.findById(id).select('-analytics');
 
     if (!job) {
       return next(createError('Job not found', 404));
@@ -124,16 +190,24 @@ class JobController {
    */
   updateJob = asyncHandler(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { id } = req.params;
+    const { status, expirationDate, postedDate: bodyPostedDate, ...updateData } = req.body;
+
+    const existingJob = await Job.findById(id);
+    if (!existingJob) {
+      return next(createError('Job not found', 404));
+    }
+
+    const updateFields: any = { ...updateData };
+    
+    if (status === 'published' && existingJob.status !== 'published') {
+      updateFields.postedDate = new Date();
+    }
 
     const job = await Job.findByIdAndUpdate(
       id,
-      req.body,
+      updateFields,
       { new: true, runValidators: true }
     );
-
-    if (!job) {
-      return next(createError('Job not found', 404));
-    }
 
     logger.info('Job updated', { jobId: id });
 
