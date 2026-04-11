@@ -273,17 +273,11 @@ export default function JobDetailPage() {
                   </div>
                 </div>
 
-                <div className="mt-6 p-4 rounded-xl bg-blue-50 border border-blue-100">
-                  <div className="flex items-center gap-2 text-blue-600 font-bold text-sm mb-2">
-                    <Bot className="w-4 h-4" /> AI Match Score
+                <div className="mt-6 p-4 rounded-xl bg-green-50 border border-green-100">
+                  <div className="flex items-center gap-2 text-green-600 font-bold text-sm mb-2">
+                    <Briefcase className="w-4 h-4" /> Job Details
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-2xl font-black text-blue-600">87%</span>
-                    <span className="text-xs text-blue-500">Based on your profile</span>
-                  </div>
-                  <div className="w-full h-2 bg-blue-100 rounded-full mt-2 overflow-hidden">
-                    <div className="h-full rounded-full bg-blue-500" style={{ width: '87%' }} />
-                  </div>
+                  <p className="text-sm text-slate-600">Review the job requirements and apply if you're interested.</p>
                 </div>
 
                 <button 

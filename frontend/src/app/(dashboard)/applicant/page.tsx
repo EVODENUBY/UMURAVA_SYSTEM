@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { FaBriefcase, FaFileAlt, FaClock, FaCheckCircle, FaArrowRight, FaSearch, FaMapMarkerAlt, FaRobot, FaTrophy, FaRocket } from 'react-icons/fa';
+import { FaBriefcase, FaFileAlt, FaClock, FaSearch, FaRocket, FaArrowRight, FaMapMarkerAlt } from 'react-icons/fa';
 import { useLoading } from '@/contexts/LoadingContext';
 
 const BRAND_COLOR = "#2b71f0";
@@ -46,17 +46,14 @@ export default function ApplicantDashboard() {
   }, [withLoading]);
 
   const stats = [
-    { label: 'Applications', value: '12', icon: <FaFileAlt />, color: 'from-blue-500 to-blue-600', bgColor: 'bg-blue-50', textColor: 'text-blue-600' },
-    { label: 'In Review', value: '3', icon: <FaClock />, color: 'from-amber-500 to-amber-600', bgColor: 'bg-amber-50', textColor: 'text-amber-600' },
-    { label: 'Interviews', value: '2', icon: <FaCheckCircle />, color: 'from-emerald-500 to-emerald-600', bgColor: 'bg-emerald-50', textColor: 'text-emerald-600' },
-    { label: 'Saved Jobs', value: '8', icon: <FaBriefcase />, color: 'from-purple-500 to-purple-600', bgColor: 'bg-purple-50', textColor: 'text-purple-600' },
+    { label: 'Applications', value: '0', icon: <FaFileAlt /> },
+    { label: 'In Review', value: '0', icon: <FaClock /> },
   ];
 
   const quickActions = [
-    { label: 'Find Jobs', icon: <FaSearch />, href: '/applicant/jobs', color: 'from-blue-500 to-blue-600' },
-    { label: 'View Applications', icon: <FaFileAlt />, href: '/applicant/applications', color: 'from-emerald-500 to-emerald-600' },
-    { label: 'AI Match Score', icon: <FaRobot />, href: '/applicant/profile', color: 'from-purple-500 to-purple-600' },
-    { label: 'Complete Profile', icon: <FaRocket />, href: '/applicant/profile', color: 'from-amber-500 to-amber-600' },
+    { label: 'Find Jobs', icon: <FaSearch />, href: '/applicant/jobs' },
+    { label: 'View Applications', icon: <FaFileAlt />, href: '/applicant/applications' },
+    { label: 'My Profile', icon: <FaRocket />, href: '/applicant/profile' },
   ];
 
   return (
@@ -75,14 +72,6 @@ export default function ApplicantDashboard() {
               Welcome, {user?.fullName?.split(' ')[0] || "Talent"}
             </h1>
             <p className="text-blue-100 text-lg">Find your next opportunity in Africa&apos;s tech ecosystem</p>
-            <div className="flex items-center gap-4 mt-4">
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-white/20 rounded-full text-sm">
-                <FaTrophy className="text-amber-300" /> #1 Match Rate
-              </div>
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-white/20 rounded-full text-sm">
-                <FaRocket /> 95% Profile Score
-              </div>
-            </div>
           </div>
           <Link 
             href="/applicant/jobs"
@@ -93,47 +82,30 @@ export default function ApplicantDashboard() {
         </div>
       </motion.div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="flex flex-wrap gap-3">
         {stats.map((stat, i) => (
-          <motion.div 
-            key={stat.label} 
-            initial={{ opacity: 0, y: 20 }} 
-            animate={{ opacity: 1, y: 0 }} 
-            transition={{ delay: i * 0.1 }}
+          <Link
+            key={stat.label}
+            href={stat.label === 'Applications' ? '/applicant/applications' : '/applicant/jobs'}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-all"
           >
-            <div className={`p-6 rounded-2xl ${stat.bgColor} border border-white shadow-lg`}>
-              <div className="flex items-center gap-4">
-                <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${stat.color} flex items-center justify-center text-white shadow-lg`}>
-                  {stat.icon}
-                </div>
-                <div>
-                  <p className="text-3xl font-black" style={{ color: BRAND_COLOR }}>{stat.value}</p>
-                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500">{stat.label}</p>
-                </div>
-              </div>
-            </div>
-          </motion.div>
+            <span className="text-slate-600">{stat.icon}</span>
+            <span className="text-sm font-medium text-slate-700">{stat.label}</span>
+            <span className="text-lg font-bold" style={{ color: BRAND_COLOR }}>{stat.value}</span>
+          </Link>
         ))}
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="flex flex-wrap gap-3">
         {quickActions.map((action, i) => (
-          <motion.div
+          <Link
             key={action.label}
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.4 + i * 0.05 }}
+            href={action.href}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-all"
           >
-            <Link 
-              href={action.href}
-              className={`block p-4 rounded-2xl bg-gradient-to-br ${action.color} text-white text-center hover:shadow-xl hover:scale-105 transition-all`}
-            >
-              <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center mx-auto mb-2">
-                {action.icon}
-              </div>
-              <span className="font-bold text-sm uppercase tracking-wider">{action.label}</span>
-            </Link>
-          </motion.div>
+            <span className="text-slate-600">{action.icon}</span>
+            <span className="text-sm font-medium text-slate-700">{action.label}</span>
+          </Link>
         ))}
       </div>
 
@@ -251,31 +223,6 @@ export default function ApplicantDashboard() {
           </div>
         </motion.div>
       </div>
-
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5 }}
-        className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-3xl p-8 text-white"
-      >
-        <div className="flex flex-col lg:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-6">
-            <div className="w-16 h-16 rounded-2xl bg-white/20 flex items-center justify-center">
-              <FaRobot className="text-3xl" />
-            </div>
-            <div>
-              <h3 className="text-2xl font-black uppercase tracking-tight">AI-Powered Matching</h3>
-              <p className="text-blue-100 mt-1">Our AI analyzes your profile and matches you with the best opportunities</p>
-            </div>
-          </div>
-          <Link 
-            href="/applicant/profile"
-            className="px-8 py-4 rounded-2xl bg-white text-blue-600 font-bold text-sm uppercase tracking-wider shadow-xl hover:shadow-2xl hover:scale-105 transition-all whitespace-nowrap"
-          >
-            Update Profile for Better Matches
-          </Link>
-        </div>
-      </motion.div>
     </div>
   );
 }

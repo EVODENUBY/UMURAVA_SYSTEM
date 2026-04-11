@@ -21,11 +21,14 @@ const BRAND_COLOR = "#2b71f0";
 interface Job {
   _id: string;
   title: string;
-  location: string;
-  createdAt: string;
-  experience: { level: string };
-  salary: { min: number; max: number; currency: string };
-  requiredSkills: string[];
+  location?: string;
+  createdAt?: string;
+  experience?: { level: string };
+  salary?: { min: number; max: number; currency: string };
+  requiredSkills?: string[];
+  description?: string;
+  company?: string;
+  employmentType?: string;
 }
 
 const translations = {
@@ -169,11 +172,18 @@ export default function LandingPage() {
   const fetchJobs = async (query = "") => {
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:10000/api/jobs?page=1&limit=10&search=${query}`);
+      const res = await fetch(`https://recruiter-ai-platform.onrender.com/api/jobs?page=1&limit=10${query ? `&search=${query}` : ''}`);
       const result = await res.json();
-      if (result.success) setJobs(result.data.jobs);
+      if (result.success && result.data?.jobs) {
+        setJobs(result.data.jobs);
+      } else if (Array.isArray(result.data)) {
+        setJobs(result.data);
+      } else if (Array.isArray(result)) {
+        setJobs(result);
+      }
     } catch (error) {
       console.error("Fetch error:", error);
+      setJobs([]);
     } finally {
       setLoading(false);
     }
@@ -287,8 +297,8 @@ export default function LandingPage() {
           </Link>
           <div className="hidden lg:flex items-center gap-8 font-semibold text-sm text-slate-600">
             <Link href="#jobs" className="hover:text-slate-900 transition-colors">{t.findJob}</Link>
-            <Link href="#" className="hover:text-slate-900 transition-colors">{t.ourProcess}</Link>
-            <Link href="/login" className="px-6 py-2.5 rounded-xl border-2 transition-all hover:shadow-md" style={{ borderColor: BRAND_COLOR, color: BRAND_COLOR }}>{t.signIn}</Link>
+            <Link href="#jobs" className="hover:text-slate-900 transition-colors">Jobs</Link>
+            <Link href="/login" className="px-6 py-2.5 rounded-xl bg-blue-600 text-white font-semibold transition-all hover:shadow-md hover:bg-blue-700">Get Started</Link>
           </div>
           <div className="hidden md:flex items-center gap-2">
             <select 
@@ -324,88 +334,86 @@ export default function LandingPage() {
           transition={{ duration: 1 }}
           className="absolute inset-0 overflow-hidden pointer-events-none"
         >
+          <svg className="absolute inset-0 w-full h-full">
+            <defs>
+              <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#2b71f0" stopOpacity="0"/>
+                <stop offset="50%" stopColor="#2b71f0" stopOpacity="0.6"/>
+                <stop offset="100%" stopColor="#2b71f0" stopOpacity="0"/>
+              </linearGradient>
+            </defs>
+            <motion.polyline points="60,80 200,60 380,100 520,40 480,160 300,180 140,140" fill="none" stroke="url(#lineGradient)" strokeWidth="1" initial={{ pathLength: 0 }} animate={{ pathLength: [0, 1, 0] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }} />
+            <motion.polyline points="80,180 220,160 400,200 480,140 440,220 280,240 160,200" fill="none" stroke="url(#lineGradient)" strokeWidth="1" initial={{ pathLength: 0 }} animate={{ pathLength: [0, 1, 0] }} transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }} />
+            <motion.polyline points="100,100 180,80 280,120 360,80 340,160 240,180 160,160" fill="none" stroke="url(#lineGradient)" strokeWidth="1" initial={{ pathLength: 0 }} animate={{ pathLength: [0, 1, 0] }} transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut", delay: 1 }} />
+          </svg>
           <motion.div 
-            animate={{ y: [0, -20, 0], x: [0, 10, 0] }}
-            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute top-20 left-10 md:left-20 text-blue-200 opacity-30"
-          >
-            <Code2 className="w-16 h-16 md:w-24 md:h-24" />
-          </motion.div>
-          <motion.div 
-            animate={{ y: [0, 20, 0], x: [0, -15, 0] }}
+            animate={{ y: [0, -15, 0], x: [0, 8, 0] }}
             transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute top-32 right-10 md:right-32 text-blue-200 opacity-30"
+            className="absolute top-16 left-[15%] md:left-[12%] text-blue-200/40"
           >
-            <UserCheck className="w-14 h-14 md:w-20 md:h-20" />
+            <Code2 className="w-12 h-12 md:w-16 md:h-16" />
           </motion.div>
           <motion.div 
-            animate={{ y: [0, 15, 0], x: [0, 10, 0] }}
+            animate={{ y: [0, 20, 0], x: [0, -10, 0] }}
+            transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+            className="absolute top-24 right-[15%] md:right-[12%] text-blue-200/40"
+          >
+            <UserCheck className="w-10 h-10 md:w-14 md:h-14" />
+          </motion.div>
+          <motion.div 
+            animate={{ y: [0, 12, 0], x: [0, 10, 0] }}
             transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute bottom-20 left-1/4 text-blue-200 opacity-25"
+            className="absolute bottom-32 left-[25%] text-blue-200/40 hidden md:block"
           >
-            <Handshake className="w-12 h-12 md:w-16 md:h-16" />
+            <Handshake className="w-10 h-10" />
           </motion.div>
           <motion.div 
-            animate={{ y: [0, -25, 0], x: [0, -10, 0] }}
+            animate={{ y: [0, -18, 0], x: [0, -8, 0] }}
             transition={{ duration: 5.5, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute bottom-32 right-1/4 text-blue-200 opacity-25"
+            className="absolute bottom-24 right-[20%] text-blue-200/40 hidden md:block"
           >
-            <TrendingUp className="w-14 h-14 md:w-18 md:h-18" />
+            <TrendingUp className="w-12 h-12" />
           </motion.div>
           <motion.div 
-            animate={{ y: [0, 10, 0], x: [0, 15, 0] }}
-            transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute top-1/3 left-10 md:left-40 text-blue-200 opacity-20"
+            animate={{ y: [0, 10, 0], x: [0, 12, 0] }}
+            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            className="absolute top-[40%] left-[8%] text-blue-200/35 hidden md:block"
           >
-            <Briefcase className="w-10 h-10 md:w-14 md:h-14" />
+            <Briefcase className="w-9 h-9" />
           </motion.div>
           <motion.div 
-            animate={{ y: [0, -15, 0], x: [0, -10, 0] }}
-            transition={{ duration: 4.2, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute top-1/4 right-20 md:right-40 text-blue-200 opacity-20"
+            animate={{ y: [0, -12, 0], x: [0, -8, 0] }}
+            transition={{ duration: 4.8, repeat: Infinity, ease: "easeInOut" }}
+            className="absolute top-[35%] right-[10%] text-blue-200/35 hidden md:block"
           >
-            <Lightbulb className="w-12 h-12 md:w-16 md:h-16" />
+            <Lightbulb className="w-10 h-10" />
           </motion.div>
         </motion.div>
 
         <div className="max-w-4xl mx-auto text-center px-2 relative z-10">
           <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
-            <div className="inline-flex items-center gap-2 mb-4 px-4 py-2 rounded-full bg-blue-50 border border-blue-100">
-              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-xs font-semibold text-blue-600 uppercase tracking-wider">AI-Powered Hiring</span>
-            </div>
-             <h1 className="text-3xl xs:text-4xl sm:text-5xl md:text-6xl font-black text-slate-900 leading-[1.15] mb-6 sm:mb-8 uppercase">
-              Umurava <br/><span className="sm:mt-2 block sm:inline" style={{ color: BRAND_COLOR }}>{t.africanTalent}</span>
+             <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 leading-[1.15] mb-3 uppercase">
+              Umurava <span className="sm:ml-2" style={{ color: BRAND_COLOR }}>{t.africanTalent}</span>
             </h1>
-            <div className="flex items-center justify-center gap-8 mb-6 text-xs font-medium text-slate-500">
-              <div className="flex items-center gap-2">
-                <div className="w-px h-8 bg-gradient-to-b from-blue-400 to-transparent" />
-                <span>10K+ Jobs</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-px h-8 bg-gradient-to-b from-blue-400 to-transparent" />
-                <span>5K+ Talent</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-px h-8 bg-gradient-to-b from-blue-400 to-transparent" />
-                <span>200+ Companies</span>
-              </div>
-            </div>
-            <p className="text-sm sm:text-base text-slate-600 mb-8 sm:mb-10 max-w-xl mx-auto font-medium leading-relaxed">
+            <p className="text-sm text-slate-600 mb-4 max-w-xl mx-auto">
               {t.welcomeText}
             </p>
-            <div className="max-w-xl mx-auto relative group px-4 sm:px-0">
+            <div className="max-w-lg mx-auto relative">
               <input 
                 type="text"
                 placeholder={t.searchPlaceholder}
-                className="w-full pl-5 sm:pl-6 pr-14 sm:pr-16 py-4 sm:py-5 rounded-full sm:rounded-[2rem] bg-white border-2 border-slate-200 shadow-lg sm:shadow-xl shadow-blue-900/10 outline-none focus:ring-2 focus:ring-blue-500/30 transition-all text-slate-900 placeholder-slate-400 text-sm sm:text-base"
+                className="w-full pl-4 pr-24 py-3 rounded-full bg-white border-2 border-slate-200 shadow-md outline-none focus:ring-2 focus:ring-blue-500/30 transition-all text-sm"
                 onChange={(e) => fetchJobs(e.target.value)}
               />
               <button 
-                className="absolute right-1.5 sm:right-3 top-1.5 sm:top-3 bottom-1.5 sm:bottom-3 w-10 sm:w-auto aspect-square sm:aspect-auto sm:px-4 rounded-full sm:rounded-full flex items-center justify-center text-white shadow-md active:scale-95 transition-all"
+                className="absolute right-1 top-1 bottom-1 w-10 rounded-full flex items-center justify-center text-white shadow-md active:scale-95 transition-all"
                 style={{ backgroundColor: BRAND_COLOR }}
               >
-                <Search className="w-4 h-4 sm:w-5 sm:h-5" />
+                {loading ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Search className="w-4 h-4" />
+                )}
               </button>
             </div>
           </motion.div>
@@ -420,100 +428,106 @@ export default function LandingPage() {
       </section>
       
 
-<main id="jobs" className="max-w-6xl mx-auto px-4 sm:px-6 pb-20 sm:pb-32 relative z-10">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 sm:mb-12 gap-3 sm:gap-4">
+<main id="jobs" className="max-w-6xl mx-auto px-4 sm:px-6 pb-16 sm:pb-24 relative z-10">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-3 sm:gap-4">
           <div className="flex items-center gap-3">
-             <div className="w-1 h-8 sm:h-10 rounded-full" style={{ backgroundColor: BRAND_COLOR }} />
-             <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-wide">{t.latestJobs}</h2>
+            <div className="w-1 h-6 sm:h-8 rounded-full" style={{ backgroundColor: BRAND_COLOR }} />
+            <h2 className="text-lg sm:text-xl font-bold text-slate-900">{t.latestJobs}</h2>
           </div>
-          <span className="text-[10px] sm:text-xs font-semibold text-white bg-blue-600 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full">
-            {jobs.length} {t.positionsAvailable}
-          </span>
+          <span className="text-xs font-semibold text-white bg-blue-600 px-2 py-1 rounded-full">
+             {jobs.length} {t.positionsAvailable}
+           </span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
            {loading ? (
-              <div className="col-span-1 md:col-span-2 lg:col-span-3 text-center py-16 sm:py-20">
-                <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                <p className="text-slate-600 font-semibold">Loading jobs...</p>
-              </div>
-            ) : jobs.length === 0 ? (
-              <div className="col-span-1 md:col-span-2 lg:col-span-3 text-center py-16">
-                <Briefcase className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                <p className="text-slate-600 font-semibold">No jobs available yet</p>
-                <p className="text-slate-400 text-sm">Check back soon for new opportunities</p>
-              </div>
-            ) : (
-              jobs.map((job, index) => (
-                <motion.div
-                  key={job._id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                  whileHover={{ y: -5 }}
-                  className="bg-white rounded-2xl border border-slate-200 shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden flex flex-col"
-                >
-                  <div className="p-6 flex-1">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="w-14 h-14 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-md" style={{ backgroundColor: BRAND_COLOR }}>
-                        {job.title.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="text-lg font-bold text-slate-900 truncate">{job.title}</h3>
-                        <p className="text-sm text-slate-500 font-medium">Umurava</p>
-                      </div>
-                    </div>
-                    
-                    <span className="inline-block px-3 py-1 rounded-full bg-green-100 text-green-700 text-xs font-bold mb-4">
-                      Active
-                    </span>
+               <div className="col-span-full text-center py-8">
+                 <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
+               </div>
+              ) : jobs.length === 0 ? (
+               <div className="col-span-full text-center py-16">
+                 <Briefcase className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+                 <p className="text-slate-600 font-semibold">No jobs available yet</p>
+                 <p className="text-slate-400 text-sm">Check back soon for new opportunities</p>
+               </div>
+             ) : (
+               jobs.map((job, index) => (
+                 <motion.div
+                   key={job._id}
+                   initial={{ opacity: 0, y: 20 }}
+                   animate={{ opacity: 1, y: 0 }}
+                   transition={{ delay: index * 0.05 }}
+                   whileHover={{ y: -3 }}
+                   className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-lg transition-all duration-200"
+                 >
+                   <div className="p-5">
+                     <div className="flex items-start gap-4 mb-4">
+                       <div className="w-14 h-14 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-md shrink-0" style={{ backgroundColor: BRAND_COLOR }}>
+                         {job.title.charAt(0).toUpperCase()}
+                       </div>
+                       <div className="flex-1 min-w-0">
+                         <h3 className="text-lg font-bold text-slate-900 truncate">{job.title}</h3>
+                         <p className="text-sm text-slate-500 font-medium">Umurava</p>
+                       </div>
+                       <span className="px-3 py-1 rounded-full bg-green-100 text-green-700 text-xs font-bold shrink-0">
+                         Active
+                       </span>
+                     </div>
 
-                    <div className="space-y-2 text-sm text-slate-600 mb-4">
-                      <div className="flex items-center gap-2">
-                        <MapPin className="w-4 h-4" style={{ color: BRAND_COLOR }} />
-                        <span className="truncate">{job.location || 'Remote'}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Briefcase className="w-4 h-4" style={{ color: BRAND_COLOR }} />
-                        <span>{job.experience?.level || 'Entry Level'}</span>
-                      </div>
-                      {job.salary?.min && job.salary?.max && (
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold" style={{ color: BRAND_COLOR }}>$</span>
-                          <span>${job.salary.min.toLocaleString()} - ${job.salary.max.toLocaleString()}</span>
-                        </div>
-                      )}
-                    </div>
+                     <div className="space-y-2 text-sm text-slate-600 mb-4">
+                       <div className="flex items-center gap-2">
+                         <MapPin className="w-4 h-4 shrink-0" style={{ color: BRAND_COLOR }} />
+                         <span className="truncate">{job.location || 'Remote'}</span>
+                       </div>
+                       <div className="flex items-center gap-2">
+                         <Briefcase className="w-4 h-4 shrink-0" style={{ color: BRAND_COLOR }} />
+                         <span>{job.experience?.level || 'Entry Level'}</span>
+                       </div>
+                       {job.salary?.min && job.salary?.max && (
+                         <div className="flex items-center gap-2">
+                           <span className="font-bold" style={{ color: BRAND_COLOR }}>$</span>
+                           <span>${job.salary.min.toLocaleString()} - ${job.salary.max.toLocaleString()}</span>
+                         </div>
+                       )}
+                       {job.employmentType && (
+                         <div className="flex items-center gap-2">
+                           <span className="font-medium">Type:</span>
+                           <span className="text-slate-700">{job.employmentType}</span>
+                         </div>
+                       )}
+                     </div>
 
-                    <div className="flex flex-wrap gap-2">
-                      {job.requiredSkills?.slice(0, 3).map((skill: string) => (
-                        <span key={skill} className="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs font-medium">
-                          {skill}
-                        </span>
-                      ))}
-                      {job.requiredSkills?.length > 3 && (
-                        <span className="px-2 py-1 bg-slate-100 text-slate-500 rounded-lg text-xs font-medium">
-                          +{job.requiredSkills.length - 3}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                     {job.requiredSkills && job.requiredSkills.length > 0 && (
+                       <div className="flex flex-wrap gap-2 mb-4">
+                         {job.requiredSkills.slice(0, 3).map((skill: string) => (
+                           <span key={skill} className="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs font-medium">
+                             {skill}
+                           </span>
+                         ))}
+                         {job.requiredSkills.length > 3 && (
+                           <span className="px-2 py-1 bg-slate-100 text-slate-500 rounded-lg text-xs font-medium">
+                             +{job.requiredSkills.length - 3}
+                           </span>
+                         )}
+                       </div>
+                     )}
 
-                  <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
-                    <span className="text-xs text-slate-400">
-                      {new Date(job.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </span>
-                    <Link 
-                      href={`/login?apply=${job._id}`}
-                      className="px-5 py-2.5 rounded-xl text-white font-bold text-sm shadow-md hover:shadow-lg hover:brightness-110 transition-all"
-                      style={{ backgroundColor: BRAND_COLOR }}
-                    >
-Apply Now
-                    </Link>
-                  </div>
-                </motion.div>
-              ))
-            )}
+                     <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                       <span className="text-xs text-slate-400">
+                         {job.createdAt ? new Date(job.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recently posted'}
+                       </span>
+                       <Link 
+                         href={`/login?apply=${job._id}`}
+                         className="px-5 py-2 rounded-lg text-white text-sm font-bold"
+                         style={{ backgroundColor: BRAND_COLOR }}
+                       >
+                         Apply Now
+                       </Link>
+                     </div>
+                   </div>
+                 </motion.div>
+               ))
+             )}
         </div>
       </main>
 

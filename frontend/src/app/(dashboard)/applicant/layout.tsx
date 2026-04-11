@@ -1,12 +1,26 @@
 "use client";
 
-import { useState, useEffect } from 'react';
-import { ReactNode } from 'react';
-import { FaHome, FaBriefcase, FaFileAlt, FaCog, FaUser, FaArrowRight, FaTimes } from 'react-icons/fa';
+import { useState, useEffect, ReactNode } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { FaHome, FaBriefcase, FaFileAlt, FaCog, FaUser, FaArrowRight, FaTimes, FaLightbulb } from 'react-icons/fa';
 import Sidebar from '@/components/ui/Sidebar';
 import Navbar from '@/components/ui/Navbar';
 import ProtectedRoute from '@/components/ui/ProtectedRoute';
 import { ROLES } from '@/lib/types';
+import JobDetailPopup from '@/components/JobDetailPopup';
+
+interface Job {
+  _id: string;
+  title: string;
+  location?: string;
+  createdAt?: string;
+  experience?: { level: string };
+  salary?: { min: number; max: number; currency: string };
+  requiredSkills?: string[];
+  description?: string;
+  company?: string;
+  employmentType?: string;
+}
 
 const applicantLinks = [
   { href: '/applicant', label: 'Dashboard', icon: <FaHome /> },
@@ -14,12 +28,24 @@ const applicantLinks = [
   { href: '/applicant/applications', label: 'Applications', icon: <FaFileAlt /> },
   { href: '/applicant/profile', label: 'Profile', icon: <FaUser /> },
   { href: '/applicant/settings', label: 'Settings', icon: <FaCog /> },
+  { href: '/applicant/recommendations', label: 'AI Recommendations', icon: <FaLightbulb /> },
 ];
 
 export default function ApplicantLayout({ children }: { children: ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [showApplyPopup, setShowApplyPopup] = useState(false);
+
+  useEffect(() => {
+    const applyJobId = searchParams.get('apply');
+    if (applyJobId) {
+      router.replace(`/applicant/jobs/${applyJobId}`);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -84,6 +110,15 @@ export default function ApplicantLayout({ children }: { children: ReactNode }) {
           />
           <main className="h-[calc(100vh-57px)] overflow-y-auto">{children}</main>
         </div>
+
+        {showApplyPopup && selectedJobId && (
+          <JobDetailPopup 
+            job={{ _id: selectedJobId, title: '', location: '', experience: { level: '' }, requiredSkills: [], createdAt: '' }}
+            isOpen={showApplyPopup}
+            onClose={() => { setShowApplyPopup(false); setSelectedJobId(null); }}
+            onApply={() => { setShowApplyPopup(false); router.push(`/applicant/jobs/${selectedJobId}`); }}
+          />
+        )}
       </div>
     </ProtectedRoute>
   );
