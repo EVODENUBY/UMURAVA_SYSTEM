@@ -87,6 +87,16 @@ export const uploadSingle = multer({
   }
 }).single('resume');
 
+// Single file upload with any field name (for general file uploads)
+export const uploadAny = multer({
+  storage: csvStorage,
+  fileFilter,
+  limits: {
+    fileSize: getMaxFileSize(),
+    files: 1
+  }
+}).any();
+
 // Multiple files upload middleware
 export const uploadMultiple = multer({
   storage: resumeStorage,
@@ -149,5 +159,7 @@ export default {
   uploadSingle,
   uploadMultiple,
   uploadCSV,
+  uploadExcel: uploadCSV, 
+  uploadAny,
   handleUploadError
 };

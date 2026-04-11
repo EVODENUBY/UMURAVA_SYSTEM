@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { protect, authorize } from '../middlewares/auth.middleware';
 import screeningController from '../controllers/screening.controller';
 import { screeningValidation } from '../controllers/screening.controller';
 
@@ -29,14 +30,9 @@ const router = Router();
  *               jobId:
  *                 type: string
  *                 example: "507f1f77bcf86cd799439011"
- *               applicantIds:
- *                 type: array
- *                 items:
- *                   type: string
- *                 description: Optional list of applicant IDs to screen (screens all if not provided)
- *               threshold:
- *                 type: number
- *                 default: 50
+*               threshold:
+  *                 type: number
+  *                 default: 0
  *                 description: Minimum score threshold
  *               autoShortlist:
  *                 type: boolean
@@ -109,6 +105,29 @@ router.post('/run', screeningValidation, screeningController.runScreening);
  *         description: Job not found
  */
 router.get('/results/:jobId', screeningController.getScreeningResults);
+
+/**
+ * @swagger
+ * /api/screening/shortlisted/{jobId}:
+ *   get:
+ *     summary: Get shortlisted candidates for a job
+ *     tags: [Screening]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: jobId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Job ID
+ *     responses:
+ *       200:
+ *         description: Shortlisted candidates
+ *       404:
+ *         description: Job not found
+ */
+router.get('/shortlisted/:jobId', protect, authorize('recruiter', 'admin'), screeningController.getShortlistedCandidates);
 
 /**
  * @swagger

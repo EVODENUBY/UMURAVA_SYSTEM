@@ -1,22 +1,75 @@
 import { Router } from 'express';
 import jobController from '../controllers/job.controller';
 import { jobValidation } from '../controllers/job.controller';
+import { protect, authorize } from '../middlewares/auth.middleware';
 
 const router = Router();
 
 /**
  * @swagger
- * tags:
- *   name: Jobs
- *   description: Job posting management and bias detection
+ * /api/jobs:
+ *   get:
+ *     summary: Get all published jobs (public - no auth required)
+ *     tags: [Jobs]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of published jobs
  */
+router.get('/', jobController.listJobs);
+
+/**
+ * @swagger
+ * /api/jobs/all:
+ *   get:
+ *     summary: Get all jobs including drafts (recruiter/admin only)
+ *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [draft, published, closed, archived]
+ *     responses:
+ *       200:
+ *         description: List of all jobs
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/all', protect, authorize('recruiter', 'admin'), jobController.listAllJobs);
 
 /**
  * @swagger
  * /api/jobs:
  *   post:
- *     summary: Create a new job posting
+ *     summary: Create a new job posting (recruiter/admin only)
  *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -27,8 +80,6 @@ const router = Router();
  *               - title
  *               - description
  *               - requiredSkills
- *               - experience
- *               - education
  *             properties:
  *               title:
  *                 type: string
@@ -36,27 +87,29 @@ const router = Router();
  *               description:
  *                 type: string
  *                 example: "We are looking for an experienced software engineer..."
+ *               employmentType:
+ *                 type: string
+ *                 enum: [full-time, part-time, contract, internship, freelance]
+ *                 default: full-time
+ *               jobLevel:
+ *                 type: string
+ *                 enum: [entry, mid, senior, lead, executive]
+ *                 default: mid
  *               requiredSkills:
  *                 type: array
  *                 items:
  *                   type: string
  *                 example: ["JavaScript", "Node.js", "MongoDB"]
+ *               responsibilities:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 example: ["Design scalable systems", "Mentor junior devs"]
  *               experience:
- *                 type: object
- *                 properties:
- *                   minYears:
- *                     type: number
- *                     example: 5
- *                   maxYears:
- *                     type: number
- *                     example: 10
- *                   level:
- *                     type: string
- *                     enum: [entry, mid, senior, executive]
- *                     example: senior
+ *                 type: string
+ *                 example: "5+ years"
  *               education:
  *                 type: array
- *                 description: Array of education requirements (allows multiple degrees/fields)
  *                 items:
  *                   type: object
  *                   properties:
@@ -69,38 +122,67 @@ const router = Router();
  *                     required:
  *                       type: boolean
  *                       example: true
- *                 example:
- *                   - degree: "Bachelor's Degree"
- *                     field: "Computer Science"
- *                     required: true
- *                   - degree: "Bachelor's Degree"
- *                     field: "Software Engineering"
- *                     required: true
- *                   - degree: "Master's Degree"
- *                     field: "Information Technology"
- *                     required: false
+ *               certifications:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               languages:
+ *                 type: array
+ *                 items:
+ *                   type: string
  *               location:
- *                 type: string
- *                 example: "New York, NY"
+ *                 type: object
+ *                 properties:
+ *                   address: { type: string }
+ *                   city: { type: string }
+ *                   country: { type: string }
+ *                   remote: { type: boolean }
  *               salary:
  *                 type: object
+ *                 nullable: true
  *                 properties:
  *                   min:
  *                     type: number
- *                     example: 100000
  *                   max:
  *                     type: number
- *                     example: 150000
  *                   currency:
  *                     type: string
- *                     example: "USD"
+ *               benefits:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               applicationProcess:
+ *                 type: object
+ *                 properties:
+ *                   steps:
+ *                     type: array
+ *                     items:
+ *                       type: string
+ *               tags:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               applicationDeadline:
+ *                 type: string
+ *                 format: date
+ *               expirationDate:
+ *                 type: string
+ *                 format: date
+ *               status:
+ *                 type: string
+ *                 enum: [draft, published, closed, archived]
+ *                 default: draft
  *     responses:
  *       201:
  *         description: Job created successfully
  *       400:
  *         description: Validation error
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Recruiter or Admin only
  */
-router.post('/', jobValidation, jobController.createJob);
+router.post('/', protect, authorize('recruiter', 'admin'), jobValidation, jobController.createJob);
 
 /**
  * @swagger
@@ -188,10 +270,12 @@ router.get('/:id', jobController.getJobById);
  *     responses:
  *       200:
  *         description: Job updated
+ *       401:
+ *         description: Unauthorized
  *       404:
  *         description: Job not found
  */
-router.put('/:id', jobController.updateJob);
+router.put('/:id', protect, authorize('recruiter', 'admin'), jobController.updateJob);
 
 /**
  * @swagger
@@ -199,6 +283,8 @@ router.put('/:id', jobController.updateJob);
  *   delete:
  *     summary: Delete a job
  *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -209,10 +295,12 @@ router.put('/:id', jobController.updateJob);
  *     responses:
  *       200:
  *         description: Job deleted
+ *       401:
+ *         description: Unauthorized
  *       404:
  *         description: Job not found
  */
-router.delete('/:id', jobController.deleteJob);
+router.delete('/:id', protect, authorize('recruiter', 'admin'), jobController.deleteJob);
 
 /**
  * @swagger
