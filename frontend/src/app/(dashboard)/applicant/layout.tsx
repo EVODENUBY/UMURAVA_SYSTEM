@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, ReactNode } from 'react';
+import { useState, useEffect, ReactNode, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { FaHome, FaBriefcase, FaFileAlt, FaCog, FaUser, FaArrowRight, FaTimes, FaLightbulb } from 'react-icons/fa';
 import Sidebar from '@/components/ui/Sidebar';
@@ -31,7 +31,7 @@ const applicantLinks = [
   { href: '/applicant/recommendations', label: 'AI Recommendations', icon: <FaLightbulb /> },
 ];
 
-export default function ApplicantLayout({ children }: { children: ReactNode }) {
+function ApplicantLayoutInner({ children }: { children: ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -45,7 +45,7 @@ export default function ApplicantLayout({ children }: { children: ReactNode }) {
     if (applyJobId) {
       router.replace(`/applicant/jobs/${applyJobId}`);
     }
-  }, [searchParams]);
+  }, [searchParams, router]);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -121,5 +121,13 @@ export default function ApplicantLayout({ children }: { children: ReactNode }) {
         )}
       </div>
     </ProtectedRoute>
+  );
+}
+
+export default function ApplicantLayout({ children }: { children: ReactNode }) {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50" />}>
+      <ApplicantLayoutInner>{children}</ApplicantLayoutInner>
+    </Suspense>
   );
 }
