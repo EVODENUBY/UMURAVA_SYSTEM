@@ -11,6 +11,7 @@ export interface IInternalApplicant extends Document {
   coverLetter?: string;
   appliedAt?: Date;
   source: 'portal';
+  rejectionReason?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -58,6 +59,10 @@ const InternalApplicantSchema: Schema = new Schema(
       type: String,
       enum: ['portal'],
       default: 'portal'
+    },
+    rejectionReason: {
+      type: String,
+      trim: true
     }
   },
   {

@@ -137,13 +137,20 @@ router.get('/my-applications', protect, async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, error: { message: 'Unauthorized' } });
     }
 
-    const applications = await InternalApplicant.find({ userId })
-      .populate('jobId', 'title location status')
-      .sort({ appliedAt: -1 });
+    console.log('Fetching applications for user:', userId);
 
-    res.json({ success: true, data: applications });
-  } catch (error) {
-    res.status(500).json({ success: false, error: { message: 'Server error' } });
+    const applications = await InternalApplicant.find({ userId }).sort({ appliedAt: -1 });
+    console.log('Found applications (raw):', applications.length);
+
+    const populated = await InternalApplicant.populate(applications, {
+      path: 'jobId'
+    });
+    console.log('Populated successfully');
+
+    res.json({ success: true, data: populated });
+  } catch (error: any) {
+    console.error('Error fetching applications:', error);
+    res.status(500).json({ success: false, error: { message: 'Server error: ' + error.message } });
   }
 });
 
