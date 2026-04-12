@@ -354,10 +354,15 @@ const allowedOrigins = (process.env.CORS_ORIGIN?.split(',') || []).map(origin =>
 
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
+    // Allow requests with no origin (same-origin, mobile apps)
     if (!origin) return callback(null, true);
 
     // Normalize origin
     const normalizedOrigin = origin.replace(/\/$/, '');
+
+    // Allow same-origin requests (when origin matches backend)
+    const serverOrigin = `http://localhost:${process.env.PORT || 5000}`;
+    if (normalizedOrigin === serverOrigin) return callback(null, true);
 
     const isAllowed = allowedOrigins.includes(normalizedOrigin);
 
@@ -383,6 +388,9 @@ const corsOptions: cors.CorsOptions = {
 };
 
 app.use(cors(corsOptions));
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Swagger documentation route
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs, {
