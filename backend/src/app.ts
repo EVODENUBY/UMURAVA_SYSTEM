@@ -364,6 +364,10 @@ const corsOptions: cors.CorsOptions = {
     const serverOrigin = `http://localhost:${process.env.PORT || 5000}`;
     if (normalizedOrigin === serverOrigin) return callback(null, true);
 
+    // Auto-add production server origin if running in production
+    const productionOrigins = ['https://recruiter-ai-platform.onrender.com', 'https://recruiter-ai.onrender.com'];
+    if (productionOrigins.includes(normalizedOrigin)) return callback(null, true);
+
     // In production, also check without protocol for flexibility
     const originHost = normalizedOrigin.replace(/^https?:\/\//, '');
     const isAllowed = allowedOrigins.some(allowed => {
