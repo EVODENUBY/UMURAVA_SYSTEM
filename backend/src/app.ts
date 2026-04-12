@@ -350,29 +350,47 @@ app.use(helmet({
 }));
 
 // CORS configuration
-const corsOptions = {
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+const allowedOrigins = (process.env.CORS_ORIGIN?.split(',') || []).map(origin => origin.trim());
+
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (same-origin, mobile apps)
+    if (!origin) return callback(null, true);
+
+    // Normalize origin
+    const normalizedOrigin = origin.replace(/\/$/, '');
+
+    // Allow same-origin requests (when origin matches backend)
+    const serverOrigin = `http://localhost:${process.env.PORT || 5000}`;
+    if (normalizedOrigin === serverOrigin) return callback(null, true);
+
+    const isAllowed = allowedOrigins.includes(normalizedOrigin);
+
+    if (isAllowed) {
+      return callback(null, true);
+    }
+
+    console.log('❌ Blocked by CORS:', origin);
+    return callback(new Error('Not allowed by CORS'), false);
+  },
+
   credentials: true,
+
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With'
+  ],
+
+  optionsSuccessStatus: 200
 };
+
 app.use(cors(corsOptions));
 
-// Body parsing middleware
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// Serve uploaded files as static content
-app.use('/uploads', express.static(process.env.UPLOAD_DIR || 'uploads'));
-
-// Logging middleware
-if (process.env.NODE_ENV !== 'test') {
-  app.use(morgan('combined', {
-    stream: {
-      write: (message: string) => logger.info(message.trim())
-    }
-  }));
-}
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Swagger documentation route
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs, {
