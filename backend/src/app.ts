@@ -354,7 +354,7 @@ const allowedOrigins = (process.env.CORS_ORIGIN?.split(',') || []).map(origin =>
 
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
-    // Allow requests with no origin (same-origin, mobile apps)
+    // Allow requests with no origin (same-origin, mobile apps, curl/wget)
     if (!origin) return callback(null, true);
 
     // Normalize origin
@@ -364,7 +364,16 @@ const corsOptions: cors.CorsOptions = {
     const serverOrigin = `http://localhost:${process.env.PORT || 5000}`;
     if (normalizedOrigin === serverOrigin) return callback(null, true);
 
-    const isAllowed = allowedOrigins.includes(normalizedOrigin);
+    // Auto-add production server origin if running in production
+    const productionOrigins = ['https://recruiter-ai-platform.onrender.com', 'https://recruiter-ai.onrender.com'];
+    if (productionOrigins.includes(normalizedOrigin)) return callback(null, true);
+
+    // In production, also check without protocol for flexibility
+    const originHost = normalizedOrigin.replace(/^https?:\/\//, '');
+    const isAllowed = allowedOrigins.some(allowed => {
+      const normalizedAllowed = allowed.replace(/\/$/, '').replace(/^https?:\/\//, '');
+      return originHost === normalizedAllowed || normalizedOrigin === normalizedAllowed;
+    });
 
     if (isAllowed) {
       return callback(null, true);
