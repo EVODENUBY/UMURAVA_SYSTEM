@@ -350,42 +350,39 @@ app.use(helmet({
 }));
 
 // CORS configuration
+const allowedOrigins = (process.env.CORS_ORIGIN?.split(',') || []).map(origin => origin.trim());
+
 const corsOptions: cors.CorsOptions = {
-  origin: function(origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
-    const allowedOrigins = [
-      'http://localhost:3000',
-      'http://localhost:5173',
-      'https://umuravarecruit-system.vercel.app'
-    ];
-    
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'), false);
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+
+    // Normalize origin
+    const normalizedOrigin = origin.replace(/\/$/, '');
+
+    const isAllowed = allowedOrigins.includes(normalizedOrigin);
+
+    if (isAllowed) {
+      return callback(null, true);
     }
+
+    console.log('❌ Blocked by CORS:', origin);
+    return callback(new Error('Not allowed by CORS'), false);
   },
+
   credentials: true,
+
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With'
+  ],
+
+  optionsSuccessStatus: 200
 };
+
 app.use(cors(corsOptions));
-
-// Body parsing middleware
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// Serve uploaded files as static content
-app.use('/uploads', express.static(process.env.UPLOAD_DIR || 'uploads'));
-
-// Logging middleware
-if (process.env.NODE_ENV !== 'test') {
-  app.use(morgan('combined', {
-    stream: {
-      write: (message: string) => logger.info(message.trim())
-    }
-  }));
-}
 
 // Swagger documentation route
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs, {
