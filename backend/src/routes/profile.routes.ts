@@ -178,7 +178,7 @@ router.get('/recommendations', protect, async (req: Request, res: Response) => {
 
     const profile = await TalentProfile.findOne({ userId });
     if (!profile) {
-      res.status(404).json({ success: false, error: { message: 'Profile not found' } });
+      res.status(404).json({ success: false, error: { message: 'Profile not found. Please complete your profile first.' } });
       return;
     }
 
@@ -191,27 +191,33 @@ router.get('/recommendations', protect, async (req: Request, res: Response) => {
       return;
     }
 
+    const firstName = profile.basicInfo?.firstName || 'Candidate';
+    const lastName = profile.basicInfo?.lastName || '';
+    const headline = profile.basicInfo?.headline || 'N/A';
+    const skills = profile.skills?.map((s: any) => s.name).join(', ') || 'None listed';
+    const education = profile.education?.map((e: any) => `${e.degree} in ${e.fieldOfStudy}`).join(', ') || 'None listed';
+
     const prompt = `Based on the following candidate profile, recommend the most suitable jobs and explain why:
 
 Candidate Profile:
-- Name: ${profile.basicInfo.firstName} ${profile.basicInfo.lastName}
-- Headline: ${profile.basicInfo.headline || 'N/A'}
-- Skills: ${profile.skills.map((s: any) => s.name).join(', ')}
-- Years of Experience: ${profile.experience.reduce((total: number, exp: any) => total + (exp.endDate === 'Present' ? 1 : 0), 0)}
-- Education: ${profile.education.map((e: any) => `${e.degree} in ${e.fieldOfStudy}`).join(', ')}
+- Name: ${firstName} ${lastName}
+- Headline: ${headline}
+- Skills: ${skills}
+- Education: ${education}
 
 Available Jobs:
-${jobs.map((job: any, i: number) => `${i + 1}. ${job.title} - ${job.location || 'N/A'}
-   Required Skills: ${job.requiredSkills.join(', ')}
-   Experience: ${job.experience.minYears}+ years (${job.experience.level})`).join('\n\n')}
+${jobs.map((job: any, i: number) => `${i + 1}. ${job.title} - ${job.location?.city || 'N/A'}
+   Required Skills: ${job.requiredSkills?.join(', ') || 'None'}
+   Experience: ${job.experience?.minYears || 0}+ years`).join('\n\n')}
 
 Provide job recommendations with matching score and reasoning.`;
 
     const recommendation = await aiService.generateChatResponse(prompt, {});
 
     res.json({ success: true, data: { recommendations: recommendation, jobs } });
-  } catch (error) {
-    res.status(500).json({ success: false, error: { message: 'Server error getting recommendations' } });
+  } catch (error: any) {
+    console.error('Recommendations error:', error);
+    res.status(500).json({ success: false, error: { message: 'Server error getting recommendations: ' + error.message } });
   }
 });
 
