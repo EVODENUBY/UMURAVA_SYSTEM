@@ -4,8 +4,10 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { useRouter } from 'next/navigation';
 import { User, AuthState, UserRole, ROLES, ROUTES } from '@/lib/types';
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://recruiter-ai-platform.onrender.com';
+
 interface AuthContextType extends AuthState {
-  login: (email: string, password: string, role?: UserRole) => Promise<void>;
+  login: (email: string, password: string, role?: UserRole) => Promise<User>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => void;
   setUser: (user: User | null) => void;
@@ -17,6 +19,15 @@ interface RegisterData {
   phone: string;
   password: string;
   role?: UserRole;
+}
+
+interface ApiUser {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: string;
+  avatar?: string;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -33,23 +44,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    const stored = localStorage.getItem(AUTH_STORAGE_KEY);
-    if (stored) {
-      try {
-        const { user, token } = JSON.parse(stored);
-        setState({
-          user,
-          token,
-          isAuthenticated: !!user && !!token,
-          isLoading: false,
-        });
-      } catch {
-        localStorage.removeItem(AUTH_STORAGE_KEY);
-        setState(prev => ({ ...prev, isLoading: false }));
+    const initAuth = () => {
+      const stored = localStorage.getItem(AUTH_STORAGE_KEY);
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          const token = parsed?.token;
+          const user = parsed?.user;
+          if (token && user && typeof token === 'string' && token.length > 10) {
+            setState({
+              user,
+              token,
+              isAuthenticated: true,
+              isLoading: false,
+            });
+            return;
+          }
+          localStorage.removeItem(AUTH_STORAGE_KEY);
+        } catch {
+          localStorage.removeItem(AUTH_STORAGE_KEY);
+        }
       }
-    } else {
       setState(prev => ({ ...prev, isLoading: false }));
-    }
+    };
+
+    initAuth();
   }, []);
 
   const getRedirectPath = (role: UserRole): string => {
@@ -65,54 +84,79 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const login = async (email: string, password: string, role?: UserRole) => {
+  const login = async (email: string, password: string, role?: UserRole): Promise<User> => {
     setState(prev => ({ ...prev, isLoading: true }));
     
-    const determinedRole = role || ROLES.APPLICANT;
-    const mockUser: User = {
-      id: `user_${Date.now()}`,
-      email,
-      fullName: email.split('@')[0],
-      role: determinedRole,
-    };
-    const mockToken = `token_${Date.now()}_${determinedRole}`;
+    try {
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      
+      if (!data.success) {
+        setState(prev => ({ ...prev, isLoading: false }));
+        throw new Error(data.message || 'Login failed');
+      }
 
-    const authData = { user: mockUser, token: mockToken };
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authData));
+      const apiUser = data.data.user as ApiUser;
+      const token = data.data.token;
 
-    setState({
-      user: mockUser,
-      token: mockToken,
-      isAuthenticated: true,
-      isLoading: false,
-    });
+      const user: User = {
+        id: apiUser.id,
+        email: apiUser.email,
+        fullName: `${apiUser.firstName} ${apiUser.lastName}`.trim(),
+        role: apiUser.role as UserRole,
+        avatar: apiUser.avatar,
+      };
 
-    router.push(getRedirectPath(determinedRole));
+      const authData = { user, token };
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authData));
+
+      setState({
+        user,
+        token,
+        isAuthenticated: true,
+        isLoading: false,
+      });
+
+      return user;
+    } catch (error) {
+      setState(prev => ({ ...prev, isLoading: false }));
+      throw error;
+    }
   };
 
   const register = async (data: RegisterData) => {
     setState(prev => ({ ...prev, isLoading: true }));
     
-    const role = data.role || ROLES.APPLICANT;
-    const mockUser: User = {
-      id: `user_${Date.now()}`,
-      email: data.email,
-      fullName: data.fullName,
-      role,
-    };
-    const mockToken = `token_${Date.now()}_${role}`;
+    try {
+      const res = await fetch(`${API_BASE}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstName: data.fullName.split(' ')[0],
+          lastName: data.fullName.split(' ').slice(1).join(' ') || '',
+          email: data.email,
+          phone: data.phone,
+          password: data.password,
+          role: data.role || ROLES.APPLICANT,
+        }),
+      });
+      const response = await res.json();
+      
+      if (!response.success) {
+        setState(prev => ({ ...prev, isLoading: false }));
+        throw new Error(response.message || 'Registration failed');
+      }
 
-    const authData = { user: mockUser, token: mockToken };
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authData));
-
-    setState({
-      user: mockUser,
-      token: mockToken,
-      isAuthenticated: true,
-      isLoading: false,
-    });
-
-    router.push(getRedirectPath(role));
+      // Don't auto-login on registration - user must sign in manually
+      setState(prev => ({ ...prev, isLoading: false }));
+    } catch (error) {
+      setState(prev => ({ ...prev, isLoading: false }));
+      throw error;
+    }
   };
 
   const logout = () => {
@@ -123,15 +167,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: false,
       isLoading: false,
     });
-    router.push(ROUTES.LOGIN);
+    window.location.href = ROUTES.LOGIN;
   };
 
   const setUser = (user: User | null) => {
     setState(prev => ({ ...prev, user }));
   };
 
+  const value = {
+    ...state,
+    login,
+    register,
+    logout,
+    setUser,
+    token: state.token,
+  };
+  
   return (
-    <AuthContext.Provider value={{ ...state, login, register, logout, setUser }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

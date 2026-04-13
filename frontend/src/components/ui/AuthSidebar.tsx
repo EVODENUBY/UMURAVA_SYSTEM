@@ -1,14 +1,31 @@
 "use client";
 
+import { useState } from 'react';
 import { motion } from 'framer-motion';
+import Image from 'next/image';
 import { Rocket, CheckCircle2, ArrowRight, Briefcase, Users, TrendingUp, Star, User, Trophy, Sparkles } from 'lucide-react';
+import { FaGlobe } from 'react-icons/fa';
 
 interface AuthSidebarProps {
   title: string;
   subtitle: string;
+  onLanguageChange?: (lang: 'en' | 'fr' | 'rw') => void;
 }
 
-export default function AuthSidebar({ title, subtitle }: AuthSidebarProps) {
+const languages = [
+  { code: 'en', label: 'English' },
+  { code: 'fr', label: 'Français' },
+  { code: 'rw', label: 'Kinyarwanda' },
+];
+
+export default function AuthSidebar({ title, subtitle, onLanguageChange }: AuthSidebarProps) {
+  const [currentLang, setCurrentLang] = useState('en');
+
+  const handleLangChange = (code: string) => {
+    setCurrentLang(code);
+    onLanguageChange?.(code as 'en' | 'fr' | 'rw');
+  };
+
   const benefits = [
     { icon: <Briefcase className="w-4 h-4" />, text: 'Access 10,000+ job opportunities' },
     { icon: <Trophy className="w-4 h-4" />, text: 'Join exclusive challenges & win prizes' },
@@ -23,23 +40,43 @@ export default function AuthSidebar({ title, subtitle }: AuthSidebarProps) {
   ];
 
   return (
-    <div className="hidden lg:block fixed left-0 top-[60px] h-[calc(100vh-60px)] w-[30%] xl:w-[32%] bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 overflow-hidden z-30">
+    <div className="hidden lg:block fixed left-0 top-0 h-screen w-[30%] xl:w-[32%] bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 overflow-hidden z-30">
       <div className="absolute inset-0 bg-gradient-to-br from-blue-600/50 to-blue-800/50" />
 
       <div className="relative z-10 flex flex-col h-full p-6 xl:p-8 text-white">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
-              <span className="text-xl font-black">U</span>
+            <div className="w-12 h-12 rounded-2xl flex items-center justify-center">
+              <Image src="/hire me.png" alt="Hire Me" width={32} height={32} className="object-contain filter brightness-0 invert" />
             </div>
             <div>
               <span className="text-lg font-bold tracking-tight">Umurava</span>
               <span className="text-lg font-bold" style={{ color: '#bfdbfe' }}> AI</span>
             </div>
           </div>
-          <div className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-sm">
-            <Star className="w-2.5 h-2.5 text-yellow-300" />
-            <span className="text-[10px] font-semibold">4.9</span>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-sm hover:bg-white/20 transition-colors">
+                <FaGlobe className="w-3 h-3" />
+                <span className="text-[10px] font-semibold uppercase">{currentLang}</span>
+              </button>
+              <motion.div 
+                initial={{ opacity: 0, y: -5 }}
+                whileHover={{ opacity: 1, y: 0 }}
+                className="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-lg py-1 min-w-[120px]"
+              >
+                {languages.map((lang) => (
+                  <button
+                    key={lang.code}
+                    onClick={() => handleLangChange(lang.code)}
+                    className={`w-full px-3 py-2 text-left text-xs hover:bg-slate-50 flex items-center justify-between ${currentLang === lang.code ? 'text-blue-600 font-semibold' : 'text-slate-600'}`}
+                  >
+                    {lang.label}
+                    {currentLang === lang.code && <Star className="w-2.5 h-2.5 text-yellow-300" />}
+                  </button>
+                ))}
+              </motion.div>
+            </div>
           </div>
         </div>
 

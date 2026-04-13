@@ -1,60 +1,57 @@
 "use client";
 
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
-import { FaEnvelope, FaLock, FaArrowRight, FaArrowLeft, FaGlobe, FaCheck, FaBars, FaTimes } from 'react-icons/fa';
+import { useToast } from '@/contexts/ToastContext';
+import { FaEnvelope, FaLock, FaArrowRight, FaGlobe, FaCheck, FaArrowLeft, FaRocket } from 'react-icons/fa';
 import AuthSidebar from '@/components/ui/AuthSidebar';
+import { ROUTES, ROLES, UserRole } from '@/lib/types';
 
 const BRAND_COLOR = "#2b71f0";
 
 const translations = {
   en: {
-    signIn: 'Sign In',
-    welcomeBack: 'Welcome back',
-    enterCredentials: 'Enter your credentials to access your account',
-    email: 'Email address',
+    welcomeBack: 'Welcome back!',
+    enterCredentials: 'Sign in to access your account',
+    email: 'Email',
     emailPlaceholder: 'you@example.com',
     password: 'Password',
-    passwordPlaceholder: 'Enter your password',
+    passwordPlaceholder: 'Enter password',
     forgotPassword: 'Forgot password?',
-    signInButton: 'Sign in',
+    signInButton: 'Sign In',
     signingIn: 'Signing in...',
     noAccount: "Don't have an account?",
     createOne: 'Create one',
-    backToHome: 'Back to Home',
   },
   fr: {
-    signIn: 'Connexion',
-    welcomeBack: 'Bon retour',
-    enterCredentials: 'Entrez vos identifiants pour accéder à votre compte',
-    email: 'Adresse e-mail',
+    welcomeBack: 'Bon retour!',
+    enterCredentials: 'Connectez-vous pour accéder à votre compte',
+    email: 'E-mail',
     emailPlaceholder: 'vous@exemple.com',
     password: 'Mot de passe',
-    passwordPlaceholder: 'Entrez votre mot de passe',
-    forgotPassword: 'Mot de passe oublié ?',
+    passwordPlaceholder: 'Entrez le mot de passe',
+    forgotPassword: 'Mot de passe oublié?',
     signInButton: 'Se connecter',
     signingIn: 'Connexion...',
-    noAccount: "Vous n'avez pas de compte ?",
+    noAccount: 'Vous n\'avez pas de compte?',
     createOne: 'Créer un compte',
-    backToHome: 'Retour à l\'accueil',
   },
   rw: {
-    signIn: 'Injira',
-    welcomeBack: 'Murakaza neza',
-    enterCredentials: 'Shakisha amakuru yawe yo winjira',
+    welcomeBack: 'Murakaza neza!',
+    enterCredentials: 'Injira rubuga rwawe',
     email: 'Imeyili',
-    emailPlaceholder: 'wewe@Urugerero.com',
+    emailPlaceholder: 'you@example.com',
     password: 'Ijambo ryibanga',
-    passwordPlaceholder: 'Injiza irindi jambo',
-    forgotPassword: 'Wibagiwe ijambo?',
+    passwordPlaceholder: 'Injiza ijambo',
+    forgotPassword: 'Wibagiwe?',
     signInButton: 'Injira',
-    signingIn: 'Urakora...',
+    signingIn: 'kwinjira...',
     noAccount: 'Nta konti ufite?',
-    createOne: 'Fungura konte',
-    backToHome: 'Subira ahabanza',
+    createOne: 'Fungura',
   }
 };
 
@@ -65,187 +62,198 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const { login, isLoading } = useAuth();
   const router = useRouter();
+  const { showToast } = useToast();
   const [language, setLanguage] = useState<Language>('en');
   const [isLangOpen, setIsLangOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
 
   const t = translations[language];
 
+  const getRedirectPath = (role: UserRole): string => {
+    switch (role) {
+      case ROLES.APPLICANT:
+        return ROUTES.APPLICANT.DASHBOARD;
+      case ROLES.RECRUITER:
+        return ROUTES.RECRUITER.DASHBOARD;
+      case ROLES.ADMIN:
+        return ROUTES.ADMIN.DASHBOARD;
+      default:
+        return ROUTES.LANDING;
+    }
+  };
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) return;
-    await login(email, password);
+    setEmailError('');
+    setPasswordError('');
+    
+    if (!email) {
+      setEmailError('Email is required');
+      return;
+    }
+    if (!password) {
+      setPasswordError('Password is required');
+      return;
+    }
+    try {
+      const user = await login(email, password);
+      showToast('Login successful! Redirecting...', 'success');
+      setTimeout(() => {
+        const redirectPath = getRedirectPath(user.role);
+        router.push(redirectPath);
+      }, 2000);
+    } catch (error: any) {
+      const msg = error.message?.toLowerCase() || '';
+      if (msg.includes('email') || msg.includes('not found') || msg.includes('not exist')) {
+        setEmailError('Invalid email address');
+      } else if (msg.includes('password') || msg.includes('incorrect') || msg.includes('wrong') || msg.includes('invalid credentials')) {
+        setPasswordError('Incorrect password');
+      } else {
+        showToast(error.message || 'Login failed. Please try again.', 'error');
+      }
+    }
   };
 
   return (
     <div className="min-h-screen text-slate-900 font-sans">
       <div 
-        className="fixed inset-0 -z-10 bg-cover bg-center bg-fixed"
+        className="fixed inset-0 -z-10 bg-cover bg-center bg-fixed lg:bg-none"
         style={{ backgroundImage: "url('/bg-hero.jpg')" }}
       >
-        <div className="absolute inset-0 bg-white/40" />
+        <div className="absolute inset-0 bg-white/40 lg:hidden" />
       </div>
 
-      <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-lg border-b border-slate-200 shadow-sm">
-        <div className="px-4 sm:px-6 py-3">
-          <div className="flex justify-between items-center">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center text-white font-bold shadow-md" style={{ backgroundColor: BRAND_COLOR }}>U</div>
-              <span className="text-base sm:text-lg font-bold">Umurava <span style={{ color: BRAND_COLOR }}>AI</span></span>
-            </Link>
-            
-            <div className="flex items-center gap-1 sm:gap-2">
-              <div className="relative">
-                <button 
-                  onClick={() => setIsLangOpen(!isLangOpen)}
-                  className="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-all"
-                >
-                  <FaGlobe className="w-5 h-5 sm:w-5 sm:h-5" />
-                </button>
-                {isLangOpen && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="absolute top-full right-0 mt-2 bg-white rounded-xl shadow-xl border border-slate-200 py-2 min-w-[140px] overflow-hidden"
-                  >
-                    {[
-                      { code: 'en', label: 'English' },
-                      { code: 'fr', label: 'Français' },
-                      { code: 'rw', label: 'Kinyarwanda' },
-                    ].map((lang) => (
-                      <button
-                        key={lang.code}
-                        onClick={() => { setLanguage(lang.code as Language); setIsLangOpen(false); }}
-                        className={`w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 transition-colors flex items-center justify-between ${language === lang.code ? 'text-blue-500 font-semibold bg-blue-50' : 'text-slate-600'}`}
-                      >
-                        {lang.label}
-                        {language === lang.code && <FaCheck className="text-xs" />}
-                      </button>
-                    ))}
-                  </motion.div>
-                )}
-              </div>
-              
-              <div className="hidden sm:flex items-center gap-4 font-semibold text-sm text-slate-600">
-                <Link href="/" className="hover:text-slate-900 transition-colors">Home</Link>
-                <Link href="/#jobs" className="hover:text-slate-900 transition-colors">Jobs</Link>
-                <Link href="/register" className="px-4 py-2 rounded-lg text-white transition-all" style={{ backgroundColor: BRAND_COLOR }}>Get Started</Link>
-              </div>
-
-              <button 
-                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="sm:hidden p-2 rounded-lg hover:bg-slate-100 transition-all"
-              >
-                {isMobileMenuOpen ? <FaTimes className="w-5 h-5" /> : <FaBars className="w-5 h-5" />}
-              </button>
-            </div>
-          </div>
+      {/* Mobile Header */}
+      <header className="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-white/20 lg:hidden">
+        <div className="px-4 py-3 flex justify-between items-center">
+          <Link href="/" className="flex items-center gap-1.5">
+            <Image src="/hire me.png" alt="Hire Me" width={32} height={32} className="object-contain" />
+            <span className="text-lg font-bold">Umurava <span style={{ color: BRAND_COLOR }}>AI</span></span>
+          </Link>
           
-          <AnimatePresence>
-            {isMobileMenuOpen && (
+          <div className="relative">
+            <button 
+              onClick={() => setIsLangOpen(!isLangOpen)}
+              className="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-all"
+            >
+              <FaGlobe className="w-4 h-4" />
+            </button>
+            {isLangOpen && (
               <motion.div 
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="sm:hidden mt-3 pt-3 border-t border-slate-100"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-lg border border-slate-200 py-1 min-w-[120px]"
               >
-                <div className="flex flex-col gap-2 pb-2">
-                  <Link href="/" className="px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors text-sm font-medium">Home</Link>
-                  <Link href="/#jobs" className="px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors text-sm font-medium">Jobs</Link>
-                  <Link href="/register" className="px-3 py-2.5 rounded-lg text-white text-center text-sm font-semibold" style={{ backgroundColor: BRAND_COLOR }}>Get Started</Link>
-                </div>
+                {[
+                  { code: 'en', label: 'English' },
+                  { code: 'fr', label: 'Français' },
+                  { code: 'rw', label: 'Kinyarwanda' },
+                ].map((lang) => (
+                  <button
+                    key={lang.code}
+                    onClick={() => { setLanguage(lang.code as Language); setIsLangOpen(false); }}
+                    className={`w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2 ${language === lang.code ? 'text-blue-600 font-semibold' : 'text-slate-600'}`}
+                  >
+                    {lang.label}
+                    {language === lang.code && <FaCheck className="text-xs ml-auto" />}
+                  </button>
+                ))}
               </motion.div>
             )}
-          </AnimatePresence>
+          </div>
         </div>
       </header>
 
       <AuthSidebar 
         title="Welcome Back to Umurava"
-        subtitle="Continue your journey to success. Sign in to access exclusive opportunities and connect with our community."
+        subtitle="Continue your journey to success. Sign in to access exclusive opportunities and connect with top recruiters."
+        onLanguageChange={(lang) => setLanguage(lang as Language)}
       />
-        
-      <div className="fixed inset-0 flex items-center justify-center px-4 lg:pr-10 pointer-events-none">
+         
+      <div className="lg:fixed lg:inset-0 lg:flex lg:items-center lg:justify-center px-4 sm:px-6 lg:px-8 xl:px-12 pointer-events-none">
         <motion.div 
           initial={{ opacity: 0, y: 20 }} 
           animate={{ opacity: 1, y: 0 }} 
           transition={{ duration: 0.5 }}
-          className="w-full max-w-[400px] lg:ml-[30%] xl:ml-[32%] pointer-events-auto"
+          className="w-full max-w-[400px] mx-auto pointer-events-auto py-8 lg:py-0"
         >
-          <div className="mb-6 lg:mb-8">
-            <Link href="/" className="inline-flex items-center gap-2 mb-4 lg:mb-6 group">
-              <div className="w-9 h-9 lg:w-10 lg:h-10 rounded-xl flex items-center justify-center text-white font-bold shadow-md transition-transform group-hover:scale-105" style={{ backgroundColor: BRAND_COLOR }}>
-                <FaArrowLeft className="text-sm lg:text-sm" />
-              </div>
-              <span className="text-xs lg:text-sm font-medium text-slate-500 group-hover:text-slate-700 transition-colors">{t.backToHome}</span>
-            </Link>
-            <h1 className="text-2xl lg:text-3xl font-bold text-slate-900 mb-1">{t.welcomeBack}</h1>
-            <p className="text-sm text-slate-500">{t.enterCredentials}</p>
-          </div>
+          <div className="bg-white/95 backdrop-blur-xl rounded-2xl shadow-xl border border-white/50 p-6 sm:p-8">
+            <div className="mb-5">
+              <Link href="/" className="inline-flex items-center gap-2 mb-4 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-700 transition-all text-xs font-medium">
+                <FaArrowLeft className="text-xs" />
+                <span>Back</span>
+              </Link>
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 mb-1">{t.welcomeBack}</h1>
+              <p className="text-sm text-slate-500">{t.enterCredentials}</p>
+            </div>
 
-          <div className="bg-white/95 backdrop-blur-sm p-5 lg:p-8 rounded-2xl shadow-lg lg:shadow-xl border border-slate-200">
-            <form onSubmit={handleSignIn} className="space-y-4 lg:space-y-5">
+            <form onSubmit={handleSignIn} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">{t.email}</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">{t.email}</label>
                 <div className="relative">
-                  <FaEnvelope className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
+                  <FaEnvelope className={`absolute left-3 top-1/2 -translate-y-1/2 text-sm ${emailError ? 'text-red-500' : 'text-slate-400'}`} />
                   <input 
                     type="email" 
                     required 
                     placeholder={t.emailPlaceholder} 
                     value={email} 
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all" 
+                    onChange={(e) => { setEmail(e.target.value); setEmailError(''); }}
+                    className={`w-full pl-10 pr-4 py-2.5 text-sm bg-slate-50 border rounded-xl outline-none focus:ring-2 transition-all ${emailError ? 'border-red-500 bg-red-50 focus:border-red-500' : 'border-slate-200 focus:border-blue-500 focus:ring-blue-500/20'}`} 
                   />
                 </div>
+                {emailError && <p className="text-xs text-red-500 mt-1">{emailError}</p>}
               </div>
 
               <div>
                 <div className="flex justify-between items-center mb-1.5">
-                  <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">{t.password}</label>
+                  <label className="text-xs font-semibold text-slate-600">{t.password}</label>
                   <Link href="#" className="text-[11px] font-medium" style={{ color: BRAND_COLOR }}>{t.forgotPassword}</Link>
                 </div>
                 <div className="relative">
-                  <FaLock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
+                  <FaLock className={`absolute left-3 top-1/2 -translate-y-1/2 text-sm ${passwordError ? 'text-red-500' : 'text-slate-400'}`} />
                   <input 
                     type={showPassword ? "text" : "password"} 
                     required 
                     placeholder={t.passwordPlaceholder} 
                     value={password} 
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-10 pr-12 py-3 text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all" 
+                    onChange={(e) => { setPassword(e.target.value); setPasswordError(''); }}
+                    className={`w-full pl-10 pr-12 py-2.5 text-sm bg-slate-50 border rounded-xl outline-none focus:ring-2 transition-all ${passwordError ? 'border-red-500 bg-red-50 focus:border-red-500' : 'border-slate-200 focus:border-blue-500 focus:ring-blue-500/20'}`} 
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-medium"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-medium"
                   >
                     {showPassword ? 'Hide' : 'Show'}
                   </button>
                 </div>
+                {passwordError && <p className="text-xs text-red-500 mt-1">{passwordError}</p>}
               </div>
 
-              <div className="relative">
-                <button 
-                  type="submit" 
-                  disabled={isLoading}
-                  className="w-full py-3 rounded-xl text-white text-sm font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
-                  style={{ backgroundColor: BRAND_COLOR }}
-                >
-                  {isLoading && (
-                    <span className="absolute inset-0 flex items-center justify-center rounded-xl">
+              <button 
+                type="submit" 
+                disabled={isLoading}
+                className="w-full py-2.5 rounded-xl text-white text-sm font-semibold flex items-center justify-center gap-2 transition-all disabled:opacity-70 relative overflow-hidden"
+                style={{ backgroundColor: BRAND_COLOR }}
+              >
+                {isLoading ? (
+                  <>
+                    <div className="absolute inset-0 flex items-center justify-center">
                       <div className="w-5 h-5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                    </span>
-                  )}
-                  <span className={`flex items-center gap-2 transition-opacity ${isLoading ? 'opacity-0' : 'opacity-100'}`}>
+                    </div>
+                    <span className="opacity-0">{t.signingIn}</span>
+                  </>
+                ) : (
+                  <>
                     {t.signInButton} <FaArrowRight className="text-xs" />
-                  </span>
-                </button>
-              </div>
+                  </>
+                )}
+              </button>
             </form>
 
-            <div className="mt-5 pt-5 border-t border-slate-100">
+            <div className="mt-5 pt-4 border-t border-slate-100">
               <p className="text-xs text-center text-slate-500">
                 {t.noAccount}{' '}
                 <Link href="/register" className="font-semibold" style={{ color: BRAND_COLOR }}>{t.createOne}</Link>

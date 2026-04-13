@@ -8,6 +8,7 @@ import Navbar from '@/components/ui/Navbar';
 import ProtectedRoute from '@/components/ui/ProtectedRoute';
 import { ROLES } from '@/lib/types';
 import JobDetailPopup from '@/components/JobDetailPopup';
+import { Sparkles } from 'lucide-react';
 
 interface Job {
   _id: string;
@@ -27,8 +28,8 @@ const applicantLinks = [
   { href: '/applicant/jobs', label: 'Find Jobs', icon: <FaBriefcase /> },
   { href: '/applicant/applications', label: 'Applications', icon: <FaFileAlt /> },
   { href: '/applicant/profile', label: 'Profile', icon: <FaUser /> },
-  { href: '/applicant/settings', label: 'Settings', icon: <FaCog /> },
-  { href: '/applicant/recommendations', label: 'AI Recommendations', icon: <FaLightbulb /> },
+
+  { href: '/applicant/recommendations', label: 'AI Recommendations', icon:<Sparkles className="w-5 h-5"/>},
 ];
 
 function ApplicantLayoutInner({ children }: { children: ReactNode }) {
@@ -97,10 +98,11 @@ function ApplicantLayoutInner({ children }: { children: ReactNode }) {
 
         <div className={`
           fixed top-0 right-0 bottom-0
-          m-0 p-0 md:transition-all md:duration-300 md:ease-in-out
-          ${sidebarCollapsed && !isMobile ? 'md:left-16' : 'md:left-64'}
-          ${mobileSidebarOpen && isMobile ? 'left-64' : 'left-0'}
-          ml-5
+          m-0 p-0 transition-all duration-300 ease-in-out
+          ${isMobile 
+            ? (mobileSidebarOpen ? 'left-64' : 'left-0')
+            : (sidebarCollapsed ? 'left-16' : 'left-64')
+          }
         `}>
           <Navbar 
             onToggleSidebar={toggleSidebar}
@@ -113,7 +115,7 @@ function ApplicantLayoutInner({ children }: { children: ReactNode }) {
 
         {showApplyPopup && selectedJobId && (
           <JobDetailPopup 
-            job={{ _id: selectedJobId, title: '', location: '', experience: { level: '' }, requiredSkills: [], createdAt: '' }}
+            job={{ _id: selectedJobId, title: '', location: {}, experience: '', requiredSkills: [] }}
             isOpen={showApplyPopup}
             onClose={() => { setShowApplyPopup(false); setSelectedJobId(null); }}
             onApply={() => { setShowApplyPopup(false); router.push(`/applicant/jobs/${selectedJobId}`); }}
