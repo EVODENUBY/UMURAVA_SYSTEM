@@ -18,21 +18,9 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
     if (!isLoading && !isAuthenticated) {
       router.push('/login');
     } else if (!isLoading && isAuthenticated && user && !allowedRoles.includes(user.role)) {
-      const redirectPath = getRedirectForRole(user.role);
-      router.push(redirectPath);
+      router.push(getRedirectForRole(user.role));
     }
   }, [isAuthenticated, isLoading, user, allowedRoles, router]);
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 rounded-full border-4 border-blue-500 border-t-transparent animate-spin" />
-          <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Authenticating...</p>
-        </div>
-      </div>
-    );
-  }
 
   if (!isAuthenticated || !user || !allowedRoles.includes(user.role)) {
     return null;

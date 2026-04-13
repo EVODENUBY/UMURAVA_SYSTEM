@@ -7,14 +7,27 @@ import { FaTimes, FaMapMarkerAlt, FaBriefcase, FaClock, FaDollarSign, FaBuilding
 interface Job {
   _id: string;
   title: string;
-  location: string;
-  experience: { level: string };
-  salary?: { min: number; max: number; currency: string };
-  requiredSkills: string[];
-  createdAt: string;
-  company?: string;
-  employmentType?: string;
   description?: string;
+  employmentType?: string;
+  jobLevel?: string;
+  requiredSkills?: string[];
+  responsibilities?: string[];
+  experience?: string;
+  education?: { degree: string; field: string }[];
+  certifications?: string[];
+  languages?: string[];
+  location?: { address?: string; city?: string; country?: string; remote?: boolean };
+  salary?: { min: number; max: number; currency: string };
+  benefits?: string[];
+  applicationProcess?: object;
+  tags?: string[];
+  status?: string;
+  applicationDeadline?: string;
+  expirationDate?: string;
+  postedDate?: string;
+  analytics?: object;
+  createdAt?: string;
+  company?: string;
 }
 
 interface JobDetailModalProps {
@@ -25,6 +38,15 @@ interface JobDetailModalProps {
 }
 
 export default function JobDetailModal({ job, isOpen, onClose, onApply }: JobDetailModalProps) {
+  const getLocation = (loc?: { address?: string; city?: string; country?: string; remote?: boolean }) => {
+    if (!loc) return 'Not specified';
+    if (loc.remote) return 'Remote';
+    if (loc.city) return `${loc.city}${loc.country ? ', ' + loc.country : ''}`;
+    if (loc.address) return loc.address;
+    if (loc.country) return loc.country;
+    return 'Not specified';
+  };
+
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -40,7 +62,8 @@ export default function JobDetailModal({ job, isOpen, onClose, onApply }: JobDet
     return `${currency} ${min.toLocaleString()} - ${max.toLocaleString()}`;
   };
 
-  const formatDate = (date: string) => {
+  const formatDate = (date?: string) => {
+    if (!date) return 'Not specified';
     return new Date(date).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
@@ -48,7 +71,8 @@ export default function JobDetailModal({ job, isOpen, onClose, onApply }: JobDet
     });
   };
 
-  const timeAgo = (date: string) => {
+  const timeAgo = (date?: string) => {
+    if (!date) return '';
     const now = new Date();
     const posted = new Date(date);
     const diffMs = now.getTime() - posted.getTime();
@@ -146,10 +170,10 @@ export default function JobDetailModal({ job, isOpen, onClose, onApply }: JobDet
 
                 <div className="flex flex-wrap gap-3 mb-8">
                   <span className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-xl text-sm font-medium">
-                    <FaMapMarkerAlt /> {job.location}
+                    <FaMapMarkerAlt /> {getLocation(job.location)}
                   </span>
                   <span className="flex items-center gap-2 px-4 py-2 bg-purple-50 text-purple-700 rounded-xl text-sm font-medium">
-                    <FaBriefcase /> {job.experience.level}
+                    <FaBriefcase /> {job.experience}
                   </span>
                   {job.salary && (
                     <span className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl text-sm font-medium">
@@ -187,7 +211,7 @@ export default function JobDetailModal({ job, isOpen, onClose, onApply }: JobDet
                         Required Skills
                       </h2>
                       <div className="flex flex-wrap gap-2">
-                        {job.requiredSkills.map((skill, index) => (
+                        {(job.requiredSkills || []).map((skill, index) => (
                           <span 
                             key={index}
                             className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-sm font-medium hover:bg-blue-50 hover:text-blue-700 transition-colors cursor-default"
@@ -206,7 +230,7 @@ export default function JobDetailModal({ job, isOpen, onClose, onApply }: JobDet
                         Experience Level
                       </h2>
                       <p className="text-slate-600">
-                        This position requires <span className="font-semibold text-slate-900">{job.experience.level}</span> level of experience.
+                        This position requires <span className="font-semibold text-slate-900">{job.experience}</span> level of experience.
                       </p>
                     </section>
                   </div>
@@ -230,7 +254,7 @@ export default function JobDetailModal({ job, isOpen, onClose, onApply }: JobDet
                           </div>
                           <div>
                             <p className="text-xs text-slate-400 uppercase font-bold">Location</p>
-                            <p className="text-sm font-semibold text-slate-900">{job.location}</p>
+                            <p className="text-sm font-semibold text-slate-900">{getLocation(job.location)}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
