@@ -23,11 +23,11 @@ import adminRoutes from './routes/admin.routes';
 import systemRoutes from './routes/system.routes';
 import testRoutes from './routes/test.routes';
 
-// Import middleware
+//  middleware
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware';
 const app: Application = express();
 
-// Swagger configuration
+// Swagger 
 const swaggerOptions = {
   definition: {
     openapi: '3.0.0',
