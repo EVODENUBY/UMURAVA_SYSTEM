@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import path from 'path';
 import { protect, authorize } from '../middlewares/auth.middleware';
 import ExternalApplicant from '../models/externalApplicant.model';
 import uploadMiddleware from '../middlewares/upload.middleware';
@@ -633,14 +634,15 @@ router.post('/upload-resume', protect, authorize('recruiter', 'admin'), uploadMi
 
     const { path: filePath, originalname, mimetype } = req.file;
     const { jobId, resumeLink } = req.body;
+    const absoluteFilePath = path.resolve(filePath);
 
-    logger.info('Processing resume upload', { filename: originalname, filePath, mimetype, resumeLink });
+    logger.info('Processing resume upload', { filename: originalname, filePath: absoluteFilePath, mimetype, resumeLink });
 
-    if (!filePath || !fs.existsSync(filePath)) {
+    if (!filePath || !fs.existsSync(absoluteFilePath)) {
       return res.status(400).json({ success: false, error: { message: 'File not found on server' } });
     }
 
-    const buffer = fs.readFileSync(filePath);
+    const buffer = fs.readFileSync(absoluteFilePath);
     
     let parsedResume;
     try {
@@ -692,7 +694,7 @@ router.post('/upload-resume', protect, authorize('recruiter', 'admin'), uploadMi
         experience: { years: 0 },
         education: [],
         resumeText: parsedResume.text,
-        resumeFilePath: filePath,
+        resumeFilePath: absoluteFilePath,
         resumeLink: resumeLink || undefined,
         source: 'pdf',
         jobId: jobId ? new mongoose.Types.ObjectId(jobId) : undefined,
@@ -719,7 +721,7 @@ router.post('/upload-resume', protect, authorize('recruiter', 'admin'), uploadMi
       experience: extractedData?.experience || { years: 0 },
       education: extractedData?.education || [],
       resumeText: parsedResume.text,
-      resumeFilePath: filePath,
+      resumeFilePath: absoluteFilePath,
       resumeLink: resumeLink || undefined,
       source: 'pdf',
       jobId: jobId ? new mongoose.Types.ObjectId(jobId) : undefined,
