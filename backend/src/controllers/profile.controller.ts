@@ -16,6 +16,13 @@ const calculateProfileCompletion = (profile: any) => {
   };
 
   const { basicInfo, skills, languages, experience, education, certifications, projects, availability, socialLinks } = profile;
+  
+  console.log('[DEBUG] calculateProfileCompletion - basicInfo:', {
+    firstName: basicInfo?.firstName,
+    lastName: basicInfo?.lastName,
+    avatar: basicInfo?.avatar ? 'present (length: ' + basicInfo.avatar.length + ')' : 'empty',
+    photo: basicInfo?.photo ? 'present (length: ' + basicInfo.photo.length + ')' : 'empty'
+  });
 
   if (basicInfo.firstName && basicInfo.lastName && basicInfo.email) {
     sections.basicInfo = 100;
@@ -87,11 +94,19 @@ export const createProfile = async (req: Request, res: Response) => {
       });
     }
 
+    const createData = { ...req.body };
+    if (createData.basicInfo?.photo) {
+      createData.basicInfo = { ...createData.basicInfo, avatar: createData.basicInfo.photo };
+      delete createData.basicInfo.photo;
+    }
+
     const profile = await TalentProfile.create({
       userId,
-      ...req.body,
+      ...createData,
       profileCompletion: calculateProfileCompletion(req.body)
     });
+
+    console.log('[DEBUG] Create - stored avatar:', profile?.basicInfo?.avatar ? 'length: ' + profile.basicInfo.avatar.length : 'empty');
 
     res.status(201).json({ success: true, data: profile });
   } catch (error) {
@@ -111,6 +126,9 @@ export const getProfile = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, error: { message: 'Profile not found' } });
     }
 
+    console.log('[DEBUG] Get - stored avatar:', profile?.basicInfo?.avatar ? 'length: ' + profile.basicInfo.avatar.length : 'empty');
+    console.log('[DEBUG] Get - stored photo:', (profile as any)?.basicInfo?.photo ? 'length: ' + (profile as any).basicInfo.photo.length : 'empty');
+
     res.json({ success: true, data: profile });
   } catch (error) {
     res.status(500).json({ success: false, error: { message: 'Server error fetching profile' } });
@@ -129,15 +147,24 @@ export const updateProfile = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, error: { message: 'Profile not found' } });
     }
 
+    const updateData = { ...req.body };
+    if (updateData.basicInfo?.photo) {
+      updateData.basicInfo = { ...updateData.basicInfo, avatar: updateData.basicInfo.photo };
+      delete updateData.basicInfo.photo;
+    }
+
     const updatedProfile = await TalentProfile.findOneAndUpdate(
       { userId },
       {
-        ...req.body,
+        ...updateData,
         profileCompletion: calculateProfileCompletion({ ...profile.toObject(), ...req.body })
       },
       { new: true, runValidators: true }
     );
 
+    console.log('[DEBUG] Update - incoming photo:', req.body?.basicInfo?.photo ? 'length: ' + req.body.basicInfo.photo.length : 'empty');
+    console.log('[DEBUG] Update - stored avatar:', updatedProfile?.basicInfo?.avatar ? 'length: ' + updatedProfile.basicInfo.avatar.length : 'empty');
+    
     res.json({ success: true, data: updatedProfile });
   } catch (error) {
     res.status(500).json({ success: false, error: { message: 'Server error updating profile' } });
