@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FaUser, FaEnvelope, FaMapMarkerAlt, FaBriefcase, FaGraduationCap, 
@@ -77,6 +78,7 @@ interface Profile {
     bio: string;
     location: string;
     phone: string;
+    photo?: string;
   };
   skills: Skill[];
   languages: Language[];
@@ -147,6 +149,7 @@ export default function ProfilePage() {
   const [completedSteps, setCompletedSteps] = useState<Set<StepKey>>(new Set());
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
+  const [profileImage, setProfileImage] = useState<string>('');
 
   const currentStepIndex = steps.findIndex(s => s.key === currentStep);
 
@@ -166,21 +169,39 @@ export default function ProfilePage() {
         },
       });
       const data = await res.json();
+      console.log('[DEBUG] Full API response:', JSON.stringify(data).substring(0, 500));
+      console.log('[DEBUG] Fetched profile data, photo field:', data.data?.basicInfo?.photo ? 'exists, length: ' + data.data.basicInfo.photo.length : 'empty');
+      console.log('[DEBUG] Fetched avatar field:', data.data?.basicInfo?.avatar ? 'exists, length: ' + data.data.basicInfo.avatar.length : 'empty');
       
       if (data.success && data.data) {
         const fetchedProfile = transformApiToProfile(data.data);
-        setProfile(fetchedProfile);
-        setTempProfile(fetchedProfile);
-        updateCompletedSteps(fetchedProfile);
+      setProfile(fetchedProfile);
+      setTempProfile(fetchedProfile);
+      updateCompletedSteps(fetchedProfile);
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
+      // Fallback to user data on error
+      const fallbackProfile = createEmptyProfile();
+      fallbackProfile.basicInfo = {
+        firstName: user?.fullName?.split(' ')[0] || '',
+        lastName: user?.fullName?.split(' ').slice(1).join(' ') || '',
+        email: user?.email || '',
+        headline: '',
+        bio: '',
+        location: '',
+        phone: '',
+      };
+      setProfile(fallbackProfile);
+      setTempProfile(fallbackProfile);
     } finally {
       setIsLoading(false);
     }
   };
 
   const transformApiToProfile = (apiData: any): Profile => {
+    const photo = apiData.basicInfo?.photo || apiData.basicInfo?.avatar || apiData.basicInfo?.profileImage || '';
+    setProfileImage(photo);
     return {
       basicInfo: {
         firstName: apiData.basicInfo?.firstName || '',
@@ -190,6 +211,7 @@ export default function ProfilePage() {
         bio: apiData.basicInfo?.bio || '',
         location: apiData.basicInfo?.location || '',
         phone: apiData.basicInfo?.phone || '',
+        photo: apiData.basicInfo?.photo || apiData.basicInfo?.avatar || '',
       },
       skills: apiData.skills || [],
       languages: apiData.languages || [],
@@ -267,16 +289,47 @@ export default function ProfilePage() {
     return Object.keys(newErrors).length === 0;
   };
 
+  const validateExperience = (): boolean => {
+    const newErrors: Record<string, string> = {};
+    tempProfile.experience.forEach((exp, idx) => {
+      if (!exp.role?.trim()) newErrors[`exp_role_${idx}`] = 'Job title is required';
+      if (!exp.company?.trim()) newErrors[`exp_company_${idx}`] = 'Company is required';
+      if (!exp.startDate) newErrors[`exp_start_${idx}`] = 'Start date is required';
+    });
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const validateEducation = (): boolean => {
+    const newErrors: Record<string, string> = {};
+    tempProfile.education.forEach((edu, idx) => {
+      if (!edu.degree?.trim()) newErrors[`edu_degree_${idx}`] = 'Degree is required';
+      if (!edu.institution?.trim()) newErrors[`edu_institution_${idx}`] = 'Institution is required';
+      if (!edu.startYear) newErrors[`edu_start_${idx}`] = 'Start year is required';
+    });
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const validateSkills = (): boolean => {
+    const newErrors: Record<string, string> = {};
+    tempProfile.skills.forEach((skill, idx) => {
+      if (!skill.name?.trim()) newErrors[`skill_${idx}`] = 'Skill name is required';
+    });
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const isStepValid = (step: StepKey) => {
     switch (step) {
       case 'basic':
         return tempProfile.basicInfo.firstName && tempProfile.basicInfo.lastName && tempProfile.basicInfo.email;
       case 'skills':
-        return tempProfile.skills.length > 0;
+        return tempProfile.skills.length > 0 && tempProfile.skills.every(s => s.name?.trim());
       case 'experience':
-        return tempProfile.experience.length > 0;
+        return tempProfile.experience.length > 0 && tempProfile.experience.every(e => e.role?.trim() && e.company?.trim() && e.startDate);
       case 'education':
-        return tempProfile.education.length > 0;
+        return tempProfile.education.length > 0 && tempProfile.education.every(e => e.degree?.trim() && e.institution?.trim() && e.startYear);
       case 'certifications':
         return true;
       case 'projects':
@@ -321,6 +374,7 @@ export default function ProfilePage() {
       markStepCompleted(currentStep);
       
       const profileData = transformProfileToApi(tempProfile);
+      console.log('[DEBUG] Saving profile with photo:', profileData.basicInfo?.photo ? 'yes, length: ' + profileData.basicInfo.photo.length : 'no');
       
       const res = await fetch(`${API_BASE}/api/profile`, {
         method: profile.basicInfo.firstName ? 'PUT' : 'POST',
@@ -332,6 +386,7 @@ export default function ProfilePage() {
       });
       
       const data = await res.json();
+      console.log('[DEBUG] Save response:', data);
       
       if (data.success) {
         setSaveMessage('Profile saved successfully!');
@@ -358,6 +413,45 @@ export default function ProfilePage() {
       setTempProfile(profile);
     }
     setIsEditMode(!isEditMode);
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        setErrors({ ...errors, photo: 'File size must be less than 5MB' });
+        return;
+      }
+      const compressed = await compressImage(file);
+      setProfileImage(compressed);
+      setTempProfile({
+        ...tempProfile,
+        basicInfo: { ...tempProfile.basicInfo, photo: compressed }
+      });
+      setErrors({ ...errors, photo: '' });
+    }
+  };
+
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = window.Image ? new window.Image() : document.createElement('img');
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxDim = 400;
+        let { width, height } = img;
+        if (width > height) {
+          if (width > maxDim) { height = (height * maxDim) / width; width = maxDim; }
+        } else {
+          if (height > maxDim) { width = (width * maxDim) / height; height = maxDim; }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.7));
+      };
+      img.src = URL.createObjectURL(file);
+    });
   };
 
   const getLevelColor = (level: string) => {
@@ -466,13 +560,27 @@ export default function ProfilePage() {
         </Link>
       </div>
 
-      {profile.basicInfo.firstName && !isEditMode && (
-        <div className="mb-4 flex justify-end">
+      {!isEditMode && (
+        <div className="mb-4 flex justify-end gap-2">
           <button
             onClick={toggleEditMode}
             className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-blue-500 text-white hover:bg-blue-600 transition-colors"
           >
             <FaEdit /> Edit Profile
+          </button>
+        </div>
+      )}
+
+      {isEditMode && (
+        <div className="mb-4 flex justify-end gap-2">
+          <button
+            onClick={() => {
+              setTempProfile(profile);
+              setIsEditMode(false);
+            }}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border-2 border-slate-300 text-slate-600 hover:bg-slate-100 transition-colors"
+          >
+            <FaTimes /> Cancel
           </button>
         </div>
       )}
@@ -546,10 +654,7 @@ export default function ProfilePage() {
         >
           <div className="p-6 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
             <div className="flex items-center gap-4">
-              <div 
-                className="w-12 h-12 rounded-xl flex items-center justify-center text-white"
-                style={{ backgroundColor: BRAND_COLOR }}
-              >
+              <div className="text-2xl" style={{ color: BRAND_COLOR }}>
                 {steps.find(s => s.key === currentStep)?.icon}
               </div>
               <div>
@@ -570,18 +675,24 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <div className="p-6">
+          <div className="p-3 md:p-6 pb-24 md:pb-20">
             {currentStep === 'basic' && (
               <div className="space-y-6">
                 <div className="flex items-center gap-6 mb-8">
-                  <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-blue-100 to-blue-50 flex items-center justify-center text-3xl font-black text-blue-500">
-                    {tempProfile.basicInfo.firstName?.charAt(0) || '?'}{tempProfile.basicInfo.lastName?.charAt(0) || ''}
+                  <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-blue-100 to-blue-50 flex items-center justify-center text-3xl font-black text-blue-500 overflow-hidden relative">
+                    {profileImage ? (
+                      <Image src={profileImage} fill alt="Profile" className="object-cover" />
+                    ) : (
+                      <>{tempProfile.basicInfo.firstName?.charAt(0) || '?'}{tempProfile.basicInfo.lastName?.charAt(0) || ''}</>
+                    )}
                   </div>
                   <div>
-                    <button className="px-4 py-2 rounded-xl text-white text-sm font-medium shadow-lg" style={{ backgroundColor: BRAND_COLOR }}>
+                    <label className="px-4 py-2 rounded-xl text-white text-sm font-medium shadow-lg cursor-pointer" style={{ backgroundColor: BRAND_COLOR }}>
                       Upload Photo
-                    </button>
+                      <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                    </label>
                     <p className="text-xs text-slate-400 mt-2">JPG, PNG up to 5MB</p>
+                    {errors.photo && <p className="text-red-500 text-xs mt-1">{errors.photo}</p>}
                   </div>
                 </div>
 
@@ -597,7 +708,6 @@ export default function ProfilePage() {
                       }}
                       placeholder="John"
                       className={`w-full px-4 py-3 rounded-xl border-2 outline-none focus:border-blue-500 transition-colors ${errors.firstName ? 'border-red-500' : 'border-slate-200'}`}
-                      disabled={!isEditMode && !!profile.basicInfo.firstName}
                     />
                     {errors.firstName && <p className="text-red-500 text-xs mt-1">{errors.firstName}</p>}
                   </div>
@@ -612,7 +722,6 @@ export default function ProfilePage() {
                       }}
                       placeholder="Mugabo"
                       className={`w-full px-4 py-3 rounded-xl border-2 outline-none focus:border-blue-500 transition-colors ${errors.lastName ? 'border-red-500' : 'border-slate-200'}`}
-                      disabled={!isEditMode && !!profile.basicInfo.lastName}
                     />
                     {errors.lastName && <p className="text-red-500 text-xs mt-1">{errors.lastName}</p>}
                   </div>
@@ -627,7 +736,6 @@ export default function ProfilePage() {
                       }}
                       placeholder="john@example.com"
                       className={`w-full px-4 py-3 rounded-xl border-2 outline-none focus:border-blue-500 transition-colors ${errors.email ? 'border-red-500' : 'border-slate-200'}`}
-                      disabled={!isEditMode && !!profile.basicInfo.email}
                     />
                     {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
                   </div>
@@ -639,7 +747,6 @@ export default function ProfilePage() {
                       onChange={(e) => setTempProfile({ ...tempProfile, basicInfo: { ...tempProfile.basicInfo, phone: e.target.value } })}
                       placeholder="+250 788 123 456"
                       className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 outline-none focus:border-blue-500 transition-colors"
-                      disabled={!isEditMode && !profile.basicInfo.firstName}
                     />
                   </div>
                   <div>
@@ -650,7 +757,6 @@ export default function ProfilePage() {
                       onChange={(e) => setTempProfile({ ...tempProfile, basicInfo: { ...tempProfile.basicInfo, location: e.target.value } })}
                       placeholder="Kigali, Rwanda"
                       className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 outline-none focus:border-blue-500 transition-colors"
-                      disabled={!isEditMode && !profile.basicInfo.firstName}
                     />
                   </div>
                 </div>
@@ -662,9 +768,7 @@ export default function ProfilePage() {
                     value={tempProfile.basicInfo.headline}
                     onChange={(e) => setTempProfile({ ...tempProfile, basicInfo: { ...tempProfile.basicInfo, headline: e.target.value } })}
                     placeholder="Full Stack Developer | React, Node.js & AI"
-                    className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 outline-none focus:border-blue-500 transition-colors"
-                    disabled={!isEditMode && !profile.basicInfo.firstName}
-                  />
+                    className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 outline-none focus:border-blue-500 transition-colors" />
                 </div>
 
                 <div>
@@ -675,7 +779,6 @@ export default function ProfilePage() {
                     placeholder="Tell employers about yourself..."
                     rows={4}
                     className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 outline-none focus:border-blue-500 transition-colors resize-none"
-                    disabled={!isEditMode && !profile.basicInfo.firstName}
                   />
                 </div>
               </div>
@@ -716,16 +819,26 @@ export default function ProfilePage() {
                             <input
                               type="text"
                               value={skill.name}
-                              onChange={(e) => updateItem('skills', skill.id, 'name', e.target.value)}
+                              onChange={(e) => {
+                                updateItem('skills', skill.id, 'name', e.target.value);
+                                if (errors[`skill_${tempProfile.skills.indexOf(skill)}`]) {
+                                  const newErrors = { ...errors };
+                                  delete newErrors[`skill_${tempProfile.skills.indexOf(skill)}`];
+                                  setErrors(newErrors);
+                                }
+                              }}
                               placeholder="Skill name"
-                              className="px-3 py-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 text-sm"
-                              disabled={!isEditMode && !profile.basicInfo.firstName}
+                              className={`px-3 py-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 text-sm ${errors[`skill_${tempProfile.skills.indexOf(skill)}`] ? 'border-red-500' : ''}`}
+                              disabled={false}
                             />
+                            {errors[`skill_${tempProfile.skills.indexOf(skill)}`] && (
+                              <p className="text-red-500 text-xs">{errors[`skill_${tempProfile.skills.indexOf(skill)}`]}</p>
+                            )}
                             <select
                               value={skill.level}
                               onChange={(e) => updateItem('skills', skill.id, 'level', e.target.value)}
                               className="px-3 py-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 text-sm"
-                              disabled={!isEditMode && !profile.basicInfo.firstName}
+                              disabled={false}
                             >
                               <option value="Beginner">Beginner</option>
                               <option value="Intermediate">Intermediate</option>
@@ -738,7 +851,7 @@ export default function ProfilePage() {
                               onChange={(e) => updateItem('skills', skill.id, 'yearsOfExperience', parseInt(e.target.value))}
                               placeholder="Years"
                               className="px-3 py-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 text-sm"
-                              disabled={!isEditMode && !profile.basicInfo.firstName}
+                              disabled={false}
                             />
                           </div>
                           {isEditMode && (
@@ -785,13 +898,13 @@ export default function ProfilePage() {
                             onChange={(e) => updateItem('languages', lang.id, 'name', e.target.value)}
                             placeholder="Language"
                             className="bg-transparent outline-none text-sm font-medium w-24"
-                            disabled={!isEditMode && !profile.basicInfo.firstName}
+                            disabled={false}
                           />
                           <select
                             value={lang.proficiency}
                             onChange={(e) => updateItem('languages', lang.id, 'proficiency', e.target.value)}
                             className="bg-transparent outline-none text-xs text-slate-500"
-                            disabled={!isEditMode && !profile.basicInfo.firstName}
+                            disabled={false}
                           >
                             <option value="Basic">Basic</option>
                             <option value="Conversational">Conversational</option>
@@ -859,32 +972,36 @@ export default function ProfilePage() {
                             value={exp.role}
                             onChange={(e) => updateItem('experience', exp.id, 'role', e.target.value)}
                             placeholder="Job Title"
-                            className="px-3 py-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 text-sm"
-                            disabled={!isEditMode && !profile.basicInfo.firstName}
+                            className={`px-3 py-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 text-sm ${errors[`exp_role_${tempProfile.experience.indexOf(exp)}`] ? 'border-red-500' : ''}`}
+                            disabled={false}
                           />
+                          {errors[`exp_role_${tempProfile.experience.indexOf(exp)}`] && (
+                            <p className="text-red-500 text-xs">{errors[`exp_role_${tempProfile.experience.indexOf(exp)}`]}</p>
+                          )}
                           <input
                             type="text"
                             value={exp.company}
                             onChange={(e) => updateItem('experience', exp.id, 'company', e.target.value)}
                             placeholder="Company"
-                            className="px-3 py-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 text-sm"
-                            disabled={!isEditMode && !profile.basicInfo.firstName}
+                            className={`px-3 py-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 text-sm ${errors[`exp_company_${tempProfile.experience.indexOf(exp)}`] ? 'border-red-500' : ''}`}
+                            disabled={false}
                           />
+                          {errors[`exp_company_${tempProfile.experience.indexOf(exp)}`] && (
+                            <p className="text-red-500 text-xs">{errors[`exp_company_${tempProfile.experience.indexOf(exp)}`]}</p>
+                          )}
                           <input
-                            type="text"
+                            type="date"
                             value={exp.startDate}
                             onChange={(e) => updateItem('experience', exp.id, 'startDate', e.target.value)}
-                            placeholder="Start Date (YYYY-MM)"
                             className="px-3 py-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 text-sm"
-                            disabled={!isEditMode && !profile.basicInfo.firstName}
+                            disabled={false}
                           />
                           <input
-                            type="text"
+                            type="date"
                             value={exp.endDate}
                             onChange={(e) => updateItem('experience', exp.id, 'endDate', e.target.value)}
-                            placeholder="End Date (YYYY-MM)"
                             className="px-3 py-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 text-sm"
-                            disabled={!isEditMode && !profile.basicInfo.firstName}
+                            disabled={false}
                           />
                         </div>
                         <textarea
@@ -893,7 +1010,7 @@ export default function ProfilePage() {
                           placeholder="Describe your responsibilities and achievements..."
                           rows={3}
                           className="w-full mt-3 px-3 py-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 text-sm resize-none"
-                          disabled={!isEditMode && !profile.basicInfo.firstName}
+                          disabled={false}
                         />
                       </div>
                     ))}
@@ -939,16 +1056,19 @@ export default function ProfilePage() {
                                 value={edu.degree}
                                 onChange={(e) => updateItem('education', edu.id, 'degree', e.target.value)}
                                 placeholder="Degree (e.g., Bachelor's)"
-                                className="font-bold text-slate-900 bg-transparent outline-none"
-                                disabled={!isEditMode && !profile.basicInfo.firstName}
+                                className={`font-bold text-slate-900 bg-transparent outline-none ${errors[`edu_degree_${tempProfile.education.indexOf(edu)}`] ? 'border-b border-red-500' : ''}`}
+                                disabled={false}
                               />
+                              {errors[`edu_degree_${tempProfile.education.indexOf(edu)}`] && (
+                                <p className="text-red-500 text-xs">{errors[`edu_degree_${tempProfile.education.indexOf(edu)}`]}</p>
+                              )}
                               <input
                                 type="text"
                                 value={edu.fieldOfStudy}
                                 onChange={(e) => updateItem('education', edu.id, 'fieldOfStudy', e.target.value)}
                                 placeholder="Field of Study"
                                 className="text-sm text-slate-500 bg-transparent outline-none w-full"
-                                disabled={!isEditMode && !profile.basicInfo.firstName}
+                                disabled={false}
                               />
                             </div>
                           </div>
@@ -963,18 +1083,24 @@ export default function ProfilePage() {
                           value={edu.institution}
                           onChange={(e) => updateItem('education', edu.id, 'institution', e.target.value)}
                           placeholder="University/Institution"
-                          className="w-full px-3 py-2 mb-3 rounded-lg border border-slate-200 outline-none focus:border-blue-500 text-sm"
-                          disabled={!isEditMode && !profile.basicInfo.firstName}
+                          className={`w-full px-3 py-2 mb-3 rounded-lg border border-slate-200 outline-none focus:border-blue-500 text-sm ${errors[`edu_institution_${tempProfile.education.indexOf(edu)}`] ? 'border-red-500' : ''}`}
+                          disabled={false}
                         />
+                        {errors[`edu_institution_${tempProfile.education.indexOf(edu)}`] && (
+                          <p className="text-red-500 text-xs">{errors[`edu_institution_${tempProfile.education.indexOf(edu)}`]}</p>
+                        )}
                         <div className="flex items-center gap-3">
                           <input
                             type="number"
                             value={edu.startYear}
                             onChange={(e) => updateItem('education', edu.id, 'startYear', parseInt(e.target.value))}
                             placeholder="Start"
-                            className="px-3 py-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 text-sm"
-                            disabled={!isEditMode && !profile.basicInfo.firstName}
+                            className={`px-3 py-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 text-sm ${errors[`edu_start_${tempProfile.education.indexOf(edu)}`] ? 'border-red-500' : ''}`}
+                            disabled={false}
                           />
+                          {errors[`edu_start_${tempProfile.education.indexOf(edu)}`] && (
+                            <p className="text-red-500 text-xs">{errors[`edu_start_${tempProfile.education.indexOf(edu)}`]}</p>
+                          )}
                           <span className="text-slate-400">to</span>
                           <input
                             type="number"
@@ -982,7 +1108,7 @@ export default function ProfilePage() {
                             onChange={(e) => updateItem('education', edu.id, 'endYear', parseInt(e.target.value))}
                             placeholder="End"
                             className="px-3 py-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 text-sm"
-                            disabled={!isEditMode && !profile.basicInfo.firstName}
+                            disabled={false}
                           />
                         </div>
                       </div>
@@ -1032,7 +1158,7 @@ export default function ProfilePage() {
                           onChange={(e) => updateItem('certifications', cert.id, 'name', e.target.value)}
                           placeholder="Certification Name"
                           className="w-full px-3 py-2 mb-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 text-sm font-bold"
-                          disabled={!isEditMode && !profile.basicInfo.firstName}
+                          disabled={false}
                         />
                         <input
                           type="text"
@@ -1040,15 +1166,14 @@ export default function ProfilePage() {
                           onChange={(e) => updateItem('certifications', cert.id, 'issuer', e.target.value)}
                           placeholder="Issuer"
                           className="w-full px-3 py-2 mb-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 text-sm"
-                          disabled={!isEditMode && !profile.basicInfo.firstName}
+                          disabled={false}
                         />
                         <input
-                          type="text"
+                          type="date"
                           value={cert.issueDate}
                           onChange={(e) => updateItem('certifications', cert.id, 'issueDate', e.target.value)}
-                          placeholder="Issue Date"
                           className="w-full px-3 py-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 text-sm"
-                          disabled={!isEditMode && !profile.basicInfo.firstName}
+                          disabled={false}
                         />
                       </div>
                     ))}
@@ -1092,7 +1217,7 @@ export default function ProfilePage() {
                               onChange={(e) => updateItem('projects', project.id, 'name', e.target.value)}
                               placeholder="Project Name"
                               className="font-bold text-slate-900 bg-transparent outline-none"
-                              disabled={!isEditMode && !profile.basicInfo.firstName}
+                              disabled={false}
                             />
                           </div>
                           {isEditMode && (
@@ -1107,7 +1232,7 @@ export default function ProfilePage() {
                           onChange={(e) => updateItem('projects', project.id, 'role', e.target.value)}
                           placeholder="Your Role"
                           className="w-full px-3 py-2 mb-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 text-sm"
-                          disabled={!isEditMode && !profile.basicInfo.firstName}
+                          disabled={false}
                         />
                         <textarea
                           value={project.description}
@@ -1115,7 +1240,7 @@ export default function ProfilePage() {
                           placeholder="Project description..."
                           rows={2}
                           className="w-full mb-2 px-3 py-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 text-sm resize-none"
-                          disabled={!isEditMode && !profile.basicInfo.firstName}
+                          disabled={false}
                         />
                         <input
                           type="url"
@@ -1123,7 +1248,7 @@ export default function ProfilePage() {
                           onChange={(e) => updateItem('projects', project.id, 'link', e.target.value)}
                           placeholder="Project URL (optional)"
                           className="w-full px-3 py-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 text-sm"
-                          disabled={!isEditMode && !profile.basicInfo.firstName}
+                          disabled={false}
                         />
                       </div>
                     ))}
@@ -1169,7 +1294,7 @@ export default function ProfilePage() {
                         availability: { ...tempProfile.availability, type: e.target.value as any }
                       }) : null}
                       className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 outline-none focus:border-blue-500"
-                      disabled={!isEditMode && !profile.basicInfo.firstName}
+                      disabled={false}
                     >
                       <option value="Full-time">Full-time</option>
                       <option value="Part-time">Part-time</option>
@@ -1186,7 +1311,7 @@ export default function ProfilePage() {
                         availability: { ...tempProfile.availability, startDate: e.target.value }
                       })}
                       className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 outline-none focus:border-blue-500"
-                      disabled={!isEditMode && !profile.basicInfo.firstName}
+                      disabled={false}
                     />
                   </div>
                 </div>
@@ -1200,7 +1325,7 @@ export default function ProfilePage() {
                 </h3>
 
                 <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                  <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600">
+                  <div className="text-2xl text-blue-600">
                     <FaLinkedin className="text-xl" />
                   </div>
                   <div className="flex-1">
@@ -1214,13 +1339,13 @@ export default function ProfilePage() {
                       })}
                       placeholder="https://linkedin.com/in/yourprofile"
                       className="w-full text-sm text-slate-500 bg-transparent outline-none"
-                      disabled={!isEditMode && !profile.basicInfo.firstName}
+                      disabled={false}
                     />
                   </div>
                 </div>
 
                 <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                  <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center text-gray-700">
+                  <div className="text-2xl text-gray-700">
                     <FaGithub className="text-xl" />
                   </div>
                   <div className="flex-1">
@@ -1234,13 +1359,13 @@ export default function ProfilePage() {
                       })}
                       placeholder="https://github.com/yourusername"
                       className="w-full text-sm text-slate-500 bg-transparent outline-none"
-                      disabled={!isEditMode && !profile.basicInfo.firstName}
+                      disabled={false}
                     />
                   </div>
                 </div>
 
                 <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                  <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600">
+                  <div className="text-2xl text-purple-600">
                     <FaGlobe className="text-xl" />
                   </div>
                   <div className="flex-1">
@@ -1254,7 +1379,7 @@ export default function ProfilePage() {
                       })}
                       placeholder="https://yourportfolio.com"
                       className="w-full text-sm text-slate-500 bg-transparent outline-none"
-                      disabled={!isEditMode && !profile.basicInfo.firstName}
+                      disabled={false}
                     />
                   </div>
                 </div>
@@ -1264,53 +1389,56 @@ export default function ProfilePage() {
         </motion.div>
       </AnimatePresence>
 
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 z-20 md:left-64 lg:left-64 xl:left-64 2xl:left-64">
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-2">
           <button
             onClick={handlePrevious}
             disabled={currentStepIndex === 0}
-            className="flex items-center gap-2 px-6 py-3 rounded-xl border-2 border-slate-200 font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors"
+            className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-2 md:py-3 rounded-xl border-2 border-slate-200 font-bold text-xs md:text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors"
           >
-            <FaChevronLeft /> Previous
+            <FaChevronLeft className="w-3 h-3 md:w-4 md:h-4" /> 
+            <span className="hidden sm:inline">Previous</span>
           </button>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <button
               onClick={handleSave}
               disabled={isSaving}
-              className="flex items-center gap-2 px-6 py-3 rounded-xl border-2 font-bold text-sm"
+              className="flex items-center gap-1 md:gap-2 px-3 md:px-4 py-2 md:py-3 rounded-xl border-2 font-bold text-xs md:text-sm"
               style={{ borderColor: BRAND_COLOR, color: BRAND_COLOR }}
             >
               {isSaving ? (
-                <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                <span className="w-3 h-3 md:w-4 md:h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
               ) : (
-                <FaSave />
+                <FaSave className="w-3 h-3 md:w-4 md:h-4" />
               )} 
-              Save Progress
+              <span className="hidden sm:inline">Save Progress</span>
+              <span className="sm:hidden">Save</span>
             </button>
             
             {currentStepIndex < steps.length - 1 ? (
               <button
                 onClick={handleNext}
                 disabled={!isStepValid(currentStep)}
-                className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm text-white disabled:opacity-50 disabled:cursor-not-allowed shadow-lg transition-all"
+                className="flex items-center gap-1 md:gap-2 px-3 md:px-4 py-2 md:py-3 rounded-xl font-bold text-xs md:text-sm text-white disabled:opacity-50 disabled:cursor-not-allowed shadow-lg transition-all"
                 style={{ backgroundColor: BRAND_COLOR }}
               >
-                Next Step <FaChevronRight />
+                <span className="hidden sm:inline">Next Step</span> 
+                <FaChevronRight className="w-3 h-3 md:w-4 md:h-4" />
               </button>
             ) : (
               <button
                 onClick={handleSave}
                 disabled={isSaving || !isStepValid(currentStep)}
-                className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm text-white shadow-lg transition-all"
+                className="flex items-center gap-1 md:gap-2 px-3 md:px-4 py-2 md:py-3 rounded-xl font-bold text-xs md:text-sm text-white shadow-lg transition-all"
                 style={{ backgroundColor: isStepValid(currentStep) ? '#10b981' : '#9ca3af' }}
               >
                 {isSaving ? (
-                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span className="w-3 h-3 md:w-4 md:h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
-                  <FaCheckCircle />
+                  <FaCheckCircle className="w-3 h-3 md:w-4 md:h-4" />
                 )} 
-                Complete Profile
+                <span className="hidden sm:inline">Complete</span>
               </button>
             )}
           </div>

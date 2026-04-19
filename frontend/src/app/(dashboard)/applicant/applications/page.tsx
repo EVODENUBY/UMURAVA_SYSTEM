@@ -45,6 +45,8 @@ interface Application {
   status: string;
   coverLetter?: string;
   resumeLink?: string;
+  resumeFilePath?: string;
+  resumeText?: string;
   appliedAt: string;
   updatedAt: string;
   rejectionReason?: string;
@@ -67,6 +69,10 @@ export default function ApplicantApplicationsPage() {
   const [selectedJob, setSelectedJob] = useState<JobInfo | null>(null);
   const [showReasonModal, setShowReasonModal] = useState(false);
   const [reasonApp, setReasonApp] = useState<Application | null>(null);
+  const [showCvModal, setShowCvModal] = useState(false);
+  const [selectedAppForCv, setSelectedAppForCv] = useState<Application | null>(null);
+  const [cvLoading, setCvLoading] = useState(false);
+  const [cvUrl, setCvUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchApplications = async () => {
@@ -90,6 +96,20 @@ export default function ApplicantApplicationsPage() {
 
     fetchApplications();
   }, [token]);
+
+  const fetchCv = async (appId: string) => {
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/applicants/internal/my-cv/${appId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        setCvUrl(url);
+      }
+    } catch (e) { console.error(e); }
+    setCvLoading(false);
+  };
 
   const filteredApps = filter === 'all' 
     ? applications 
@@ -148,24 +168,23 @@ export default function ApplicantApplicationsPage() {
   };
 
   return (
-    <div className="p-4 sm:p-6 space-y-6">
+    <div className="p-3 sm:p-4 space-y-3 ml-3 sm:ml-6 mr-2">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-3xl font-black uppercase tracking-tight text-slate-900">My Applications</h1>
-        <p className="text-slate-500 mt-2">Track your job application journey</p>
+        <h1 className="text-lg font-black uppercase tracking-tight text-slate-900">My Applications</h1>
       </motion.div>
 
       {!loading && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
           {stats.map((stat, i) => (
             <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}>
-              <div className={`bg-gradient-to-br ${stat.color} rounded-2xl p-4 text-white`}>
+              <div className={`bg-gradient-to-br ${stat.color} rounded-xl p-2.5 text-white`}>
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-blue-100 text-xs font-bold uppercase">{stat.label}</p>
-                    <p className="text-3xl font-black mt-1">{stat.value}</p>
+                    <p className="text-blue-100 text-[10px] font-bold uppercase">{stat.label}</p>
+                    <p className="text-xl font-black mt-0.5">{stat.value}</p>
                   </div>
-                  <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
-                    <FaUserTie className="w-5 h-5" />
+                  <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
+                    <FaUserTie className="w-4 h-4" />
                   </div>
                 </div>
               </div>
@@ -174,12 +193,12 @@ export default function ApplicantApplicationsPage() {
         </div>
       )}
 
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-1.5 flex-wrap">
         {['all', 'applied', 'interview', 'offer', 'rejected'].map((status) => (
           <button 
             key={status} 
             onClick={() => setFilter(status)}
-            className={`px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition-all ${filter === status ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+            className={`px-2.5 py-1.5 rounded-lg font-bold text-[10px] uppercase tracking-wider transition-all ${filter === status ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}
           >
             {status === 'all' ? 'All' : statusConfig[status]?.label || status}
           </button>
@@ -187,29 +206,29 @@ export default function ApplicantApplicationsPage() {
       </div>
 
       {loading ? (
-        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <div key={i} className="bg-white rounded-2xl p-6 animate-pulse border border-slate-100">
-              <div className="flex items-start gap-4">
-                <div className="w-16 h-16 rounded-2xl bg-slate-200" />
-                <div className="flex-1 space-y-3">
-                  <div className="h-5 bg-slate-200 rounded w-3/4" />
-                  <div className="h-4 bg-slate-100 rounded w-1/2" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 ml-2 sm:ml-4">
+          {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+            <div key={i} className="bg-white rounded-xl p-3 animate-pulse border border-slate-100">
+              <div className="flex items-start gap-2">
+                <div className="w-8 h-8 rounded-lg bg-slate-200" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 bg-slate-200 rounded w-3/4" />
+                  <div className="h-2 bg-slate-100 rounded w-1/2" />
                 </div>
               </div>
             </div>
           ))}
         </div>
       ) : filteredApps.length === 0 ? (
-        <div className="text-center py-20 bg-white rounded-2xl border border-slate-200">
-          <div className="w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
-            <FaFileAlt className="w-8 h-8 text-slate-300" />
+        <div className="text-center py-10 bg-white rounded-xl border border-slate-200">
+          <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
+            <FaFileAlt className="w-5 h-5 text-slate-300" />
           </div>
-          <p className="text-slate-500 font-semibold text-lg">No applications found</p>
-          <p className="text-slate-400 text-sm mt-2">Start applying to jobs to see your applications here</p>
+          <p className="text-slate-500 font-semibold text-sm">No applications found</p>
+          <p className="text-slate-400 text-xs mt-1">Start applying to jobs</p>
         </div>
       ) : (
-        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           <AnimatePresence mode="popLayout">
             {filteredApps.map((app, i) => {
               const config = getStatusConfig(app.status);
@@ -222,56 +241,52 @@ export default function ApplicantApplicationsPage() {
                   exit={{ opacity: 0, scale: 0.9 }}
                   transition={{ delay: i * 0.05 }}
                 >
-                  <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-xl transition-all duration-300 group">
-                    <div className={`h-2 bg-gradient-to-r ${config.color.replace('text', 'from').replace('-600', '-500').replace('text', '')} to-blue-500`} />
+                  <div className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-md transition-all duration-300 group relative">
+                    <button 
+                      onClick={() => app.jobId && handleViewJob(app.jobId)}
+                      className="absolute top-2 right-2 p-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors z-10"
+                      title="View Job"
+                    >
+                      <FaEye className="w-3 h-3" />
+                    </button>
                     
-                    <div className="p-6">
-                      <div className="flex items-start gap-4 mb-4">
-                        <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center flex-shrink-0">
-                          <FaBriefcase className="w-7 h-7 text-slate-400" />
+                    <div className={`h-1.5 bg-gradient-to-r ${config.color.replace('text', 'from').replace('-600', '-500').replace('text', '')} to-blue-500`} />
+                    
+                    <div className="p-3">
+                      <div className="flex items-start gap-2 mb-2">
+                        <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
+                          <FaBriefcase className="w-4 h-4 text-slate-400" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-bold text-lg text-slate-900 truncate group-hover:text-blue-600 transition-colors">
+                          <h3 className="font-bold text-xs text-slate-900 truncate group-hover:text-blue-600 transition-colors">
                             {app.jobId?.title || 'Job Position'}
                           </h3>
-                          <p className="text-sm text-slate-500 flex items-center gap-1">
-                            <FaBuilding className="w-3 h-3" /> {app.jobId?.company || 'Company'}
+                          <p className="text-[10px] text-slate-500 flex items-center gap-1">
+                            <FaBuilding className="w-2 h-2" /> {app.jobId?.company || 'Company'}
                           </p>
                         </div>
                       </div>
 
-                      <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold ${config.bgColor} ${config.borderColor} border ${config.color}`}>
+                      <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${config.bgColor} ${config.borderColor} border ${config.color}`}>
                         {config.icon} {config.label}
                       </div>
 
-                      <div className="flex items-center gap-4 mt-4 text-sm text-slate-500">
+                      <div className="flex items-center gap-3 mt-2 text-[10px] text-slate-500">
                         {app.jobId?.location && (
-                          <span className="flex items-center gap-1">
-                            <FaMapMarker className="w-3 h-3" /> {getLocation(app.jobId.location)}
+                          <span className="flex items-center gap-0.5">
+                            <FaMapMarker className="w-2 h-2" /> {getLocation(app.jobId.location)}
                           </span>
                         )}
-                      </div>
-                      
-                      <div className="flex items-center gap-2 mt-2 text-sm text-slate-400">
-                        <FaCalendar className="w-3 h-3" /> Applied {new Date(app.appliedAt).toLocaleDateString()}
+                        <span className="flex items-center gap-0.5 text-slate-400">
+                          <FaCalendar className="w-2 h-2" /> {new Date(app.appliedAt).toLocaleDateString()}
+                        </span>
                       </div>
 
-                      <div className="flex items-center gap-3 mt-5 pt-4 border-t border-slate-100">
-                        <button 
-                          onClick={() => app.jobId && handleViewJob(app.jobId)}
-                          className="flex-1 py-2.5 rounded-xl bg-blue-50 text-blue-600 font-bold text-xs uppercase hover:bg-blue-100 transition-colors flex items-center justify-center gap-2"
-                        >
-                          <FaEye /> View Job
+                      {app.resumeFilePath && (
+                        <button onClick={() => { setSelectedAppForCv(app); setCvUrl(null); setShowCvModal(true); setCvLoading(true); fetchCv(app._id); }} className="text-[10px] text-green-600 hover:underline font-medium flex items-center gap-1 mt-2">
+                          <FaFileAlt className="w-2 h-2" /> View My CV
                         </button>
-                        {app.status === 'rejected' && (
-                          <button 
-                            onClick={() => handleViewReason(app)}
-                            className="px-4 py-2.5 rounded-xl bg-red-50 text-red-600 font-bold text-xs uppercase hover:bg-red-100 transition-colors flex items-center justify-center gap-1"
-                          >
-                            <FaInfoCircle className="w-3 h-3" />
-                          </button>
-                        )}
-                      </div>
+                      )}
                     </div>
                   </div>
                 </motion.div>
@@ -536,6 +551,47 @@ export default function ApplicantApplicationsPage() {
               >
                 Understood
               </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showCvModal && selectedAppForCv && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-6"
+            onClick={() => { setShowCvModal(false); setCvUrl(null); }}
+          >
+            <div className="absolute inset-0 bg-black/70" />
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="relative bg-white h-[85vh] w-full max-w-2xl rounded-xl shadow-2xl overflow-hidden flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-3 border-b flex justify-between items-center">
+                <div>
+                  <h3 className="font-bold text-sm">My CV</h3>
+                  <p className="text-[10px] text-slate-500">{selectedAppForCv.jobId?.title} - {selectedAppForCv.jobId?.company}</p>
+                </div>
+                <button onClick={() => { setShowCvModal(false); setCvUrl(null); }} className="p-1.5 hover:bg-slate-100 rounded-lg">
+                  <FaTimes className="w-4 h-4 text-slate-400" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-auto bg-slate-100">
+                {cvLoading && (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+                  </div>
+                )}
+                {cvUrl && (
+                  <iframe src={cvUrl} className="w-full h-full" title="CV" />
+                )}
+              </div>
             </motion.div>
           </motion.div>
         )}

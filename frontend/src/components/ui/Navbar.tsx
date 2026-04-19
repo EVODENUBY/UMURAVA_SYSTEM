@@ -48,10 +48,32 @@ export default function Navbar({ onToggleSidebar, sidebarCollapsed, onMobileMenu
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [userAvatar, setUserAvatar] = useState<string>('');
   const notificationRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   const unreadCount = notifications.filter(n => !n.read).length;
+
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/api$/, '') || 'https://recruiter-ai-platform.onrender.com';
+
+  useEffect(() => {
+    const fetchProfileAvatar = async () => {
+      if (!token) return;
+      try {
+        const res = await fetch(`${API_BASE}/api/profile`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data.success && data.data?.basicInfo) {
+          const avatar = data.data.basicInfo.avatar || data.data.basicInfo.photo || data.data.basicInfo.profileImage || '';
+          if (avatar) setUserAvatar(avatar);
+        }
+      } catch (err) {
+        console.error('Error fetching avatar:', err);
+      }
+    };
+    fetchProfileAvatar();
+  }, [token, API_BASE]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -158,9 +180,13 @@ export default function Navbar({ onToggleSidebar, sidebarCollapsed, onMobileMenu
             onClick={() => setShowUserMenu(!showUserMenu)}
             className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
           >
-            <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-semibold text-xs">
-              {getInitials()}
-            </div>
+            {userAvatar ? (
+              <Image src={userAvatar} alt="Profile" width={32} height={32} className="w-8 h-8 rounded-full object-cover" />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-semibold text-xs">
+                {getInitials()}
+              </div>
+            )}
             <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform hidden sm:block ${showUserMenu ? 'rotate-180' : ''}`} />
           </button>
 

@@ -6,6 +6,7 @@ import { FaHome, FaBriefcase, FaFileAlt, FaCog, FaUser, FaArrowRight, FaTimes, F
 import Sidebar from '@/components/ui/Sidebar';
 import Navbar from '@/components/ui/Navbar';
 import ProtectedRoute from '@/components/ui/ProtectedRoute';
+import AIChatbot from '@/components/ui/AIChatbot';
 import { ROLES } from '@/lib/types';
 import JobDetailPopup from '@/components/JobDetailPopup';
 import { Sparkles } from 'lucide-react';
@@ -121,6 +122,8 @@ function ApplicantLayoutInner({ children }: { children: ReactNode }) {
             onApply={() => { setShowApplyPopup(false); router.push(`/applicant/jobs/${selectedJobId}`); }}
           />
         )}
+
+        <AIChatbot isGuest={false} />
       </div>
     </ProtectedRoute>
   );
