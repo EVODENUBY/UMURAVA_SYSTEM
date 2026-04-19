@@ -214,13 +214,23 @@ export const applyToJob = async (req: Request, res: Response) => {
       });
     }
 
+    const coverLetter = req.body?.coverLetter || '';
+    const resumeLink = req.body?.resumeLink || '';
+
+    console.log('[DEBUG] Apply request body:', JSON.stringify(req.body));
+    console.log('[DEBUG] Cover letter received:', coverLetter ? `"${coverLetter.substring(0, 50)}..."` : 'empty');
+
     const application = await InternalApplicant.create({
       userId,
       talentProfileId: profile._id,
       jobId,
       status: 'applied',
+      coverLetter: coverLetter,
+      resumeLink: resumeLink,
       appliedAt: new Date()
     });
+
+    console.log('[DEBUG] Application saved, coverLetter:', application.coverLetter ? 'yes' : 'no');
 
     res.status(201).json({ success: true, data: application });
   } catch (error) {

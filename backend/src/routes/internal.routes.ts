@@ -178,8 +178,11 @@ router.get('/my-applications', protect, async (req: Request, res: Response) => {
     }
 
     const applications = await InternalApplicant.find({ userId })
-      .populate('jobId', 'title location status')
-      .sort({ appliedAt: -1 });
+      .populate('jobId', 'title location status company')
+      .sort({ appliedAt: -1 })
+      .select('status coverLetter resumeLink resumeFilePath appliedAt');
+
+    console.log('[DEBUG] my-applications:', { count: applications.length, hasCoverLetter: applications.some((a: any) => a.coverLetter) });
 
     res.json({ success: true, data: applications });
   } catch (error) {
