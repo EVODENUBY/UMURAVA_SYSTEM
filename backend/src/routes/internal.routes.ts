@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
 import { protect, authorize } from '../middlewares/auth.middleware';
 import InternalApplicant from '../models/internalApplicant.model';
 import TalentProfile from '../models/talentProfile.model';
@@ -179,10 +180,9 @@ router.get('/my-applications', protect, async (req: Request, res: Response) => {
 
     const applications = await InternalApplicant.find({ userId })
       .populate('jobId', 'title location status company')
-      .sort({ appliedAt: -1 })
-      .select('status coverLetter resumeLink resumeFilePath appliedAt');
+      .sort({ appliedAt: -1 });
 
-    console.log('[DEBUG] my-applications:', { count: applications.length, hasCoverLetter: applications.some((a: any) => a.coverLetter) });
+    console.log('[DEBUG] my-applications:', { count: applications.length, applications: applications.map((a: any) => ({ id: a._id, resumeFilePath: a.resumeFilePath ? 'yes' : 'no', coverLetter: !!a.coverLetter })) });
 
     res.json({ success: true, data: applications });
   } catch (error) {
@@ -331,11 +331,128 @@ router.put('/:id/status', protect, authorize('recruiter', 'admin'), async (req: 
  *         description: Unauthorized
  */
 
+router.get('/my-cv', async (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, error: { message: 'No token provided' } });
+    }
+
+    const token = authHeader.split(' ')[1];
+    const JWT_SECRET = process.env.JWT_SECRET || 'umurava_recruiter_platform_secret';
+    let decoded: any;
+    try {
+      decoded = jwt.verify(token, JWT_SECRET);
+    } catch (e) {
+      return res.status(401).json({ success: false, error: { message: 'Invalid token' } });
+    }
+
+    const userId = decoded.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: { message: 'Invalid token payload' } });
+    }
+
+    console.log('[DEBUG] my-cv: Looking for CV for userId:', userId);
+
+    const application = await InternalApplicant.findOne({ 
+      userId, 
+      resumeFilePath: { $exists: true, $ne: null } 
+    }).sort({ appliedAt: -1 }).limit(1);
+
+    if (!application || !application.resumeFilePath) {
+      console.log('[DEBUG] my-cv: No CV found for userId:', userId);
+      return res.status(404).json({ success: false, error: { message: 'No CV uploaded yet' } });
+    }
+
+    console.log('[DEBUG] my-cv: Found CV, path:', application.resumeFilePath);
+
+    if (!fs.existsSync(application.resumeFilePath)) {
+      console.log('[DEBUG] my-cv: CV file NOT on disk:', application.resumeFilePath);
+      return res.status(404).json({ success: false, error: { message: 'CV file not found on server' } });
+    }
+
+    const fileName = `my-cv-${application._id}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+    res.sendFile(application.resumeFilePath);
+  } catch (error) {
+    logger.error('Error retrieving CV:', error);
+    res.status(500).json({ success: false, error: { message: 'Error retrieving CV' } });
+  }
+});
+
+/**
+ * @swagger
+ * /api/applicants/internal/my-cv/{id}:
+ *   get:
+ *     summary: View own CV for a specific application (applicant only)
+ *     tags: [Internal Applicants]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Application ID
+ *     responses:
+ *       200:
+ *         description: CV file
+ *         content:
+ *           application/pdf:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       403:
+ *         description: Not authorized to view this CV
+ *       404:
+ *         description: Application or CV not found
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/my-cv/:id', protect, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = (req as any).user?.id;
+    
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ success: false, error: { message: 'Invalid ID' } });
+    }
+
+    const application = await InternalApplicant.findById(id);
+
+    if (!application) {
+      return res.status(404).json({ success: false, error: { message: 'Application not found' } });
+    }
+
+    if (application.userId.toString() !== userId) {
+      return res.status(403).json({ success: false, error: { message: 'Not authorized' } });
+    }
+
+    if (!application.resumeFilePath) {
+      return res.status(404).json({ success: false, error: { message: 'No CV uploaded' } });
+    }
+
+    if (!fs.existsSync(application.resumeFilePath)) {
+      return res.status(404).json({ success: false, error: { message: 'CV file not found' } });
+    }
+
+    const fileName = `my-cv.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+    res.sendFile(application.resumeFilePath);
+  } catch (error) {
+    logger.error('Error retrieving CV:', error);
+    res.status(500).json({ success: false, error: { message: 'Error retrieving CV' } });
+  }
+});
+
 /**
  * @swagger
  * /api/applicants/internal/{id}/cv:
  *   get:
- *     summary: View/Download CV of an internal applicant (recruiter/admin only)
+ *     summary: Get CV for internal applicant (recruiter)
  *     tags: [Internal Applicants]
  *     security:
  *       - bearerAuth: []
@@ -385,58 +502,6 @@ router.get('/:id/cv', protect, authorize('recruiter', 'admin'), async (req: Requ
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
     res.sendFile(application.resumeFilePath);
-  } catch (error) {
-    logger.error('Error retrieving CV:', error);
-    res.status(500).json({ success: false, error: { message: 'Error retrieving CV' } });
-  }
-});
-
-/**
- * @swagger
- * /api/applicants/internal/my-cv:
- *   get:
- *     summary: View/Download current user's CV
- *     tags: [Internal Applicants]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: CV file
- *         content:
- *           application/pdf:
- *             schema:
- *               type: string
- *               format: binary
- *       404:
- *         description: No CV uploaded
- *       401:
- *         description: Unauthorized
- */
-router.get('/my-cv', protect, async (req: Request, res: Response) => {
-  try {
-    const userId = (req as any).user?.id;
-
-    if (!userId) {
-      return res.status(401).json({ success: false, error: { message: 'Unauthorized' } });
-    }
-
-    const application = await InternalApplicant.findOne({ 
-      userId, 
-      resumeFilePath: { $exists: true, $ne: null } 
-    }).sort({ createdAt: -1 });
-
-    if (!application) {
-      return res.status(404).json({ success: false, error: { message: 'No CV uploaded yet' } });
-    }
-
-    if (!fs.existsSync(application.resumeFilePath!)) {
-      return res.status(404).json({ success: false, error: { message: 'CV file not found on server' } });
-    }
-
-    const fileName = `my-cv-${application._id}.pdf`;
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
-    res.sendFile(application.resumeFilePath!);
   } catch (error) {
     logger.error('Error retrieving CV:', error);
     res.status(500).json({ success: false, error: { message: 'Error retrieving CV' } });
@@ -497,13 +562,7 @@ router.post('/upload-resume', protect, uploadMiddleware.uploadSingle, async (req
     const extractedEmail = extractedData?.email?.trim() || '';
 
     if (!extractedData || !extractedEmail || !emailRegex.test(extractedEmail)) {
-      logger.warn('AI did not extract valid email from resume', { extractedData, extractedEmail });
-      return res.status(400).json({
-        success: false,
-        error: {
-          message: 'Could not extract a valid email from resume. Please ensure the resume has valid contact information with a proper email address.'
-        }
-      });
+      logger.warn('AI did not extract valid email from resume, allowing upload anyway', { extractedData, extractedEmail });
     }
 
     let application;
