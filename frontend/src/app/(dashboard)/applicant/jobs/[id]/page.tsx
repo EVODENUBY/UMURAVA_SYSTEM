@@ -56,13 +56,40 @@ export default function JobDetailPage() {
     
     setApplying(true);
     try {
+      let resumeUploaded = false;
+      
+      if (resume) {
+        const formData = new FormData();
+        formData.append('resume', resume);
+        formData.append('jobId', params.id as string);
+        
+        const uploadRes = await fetch(`${API_BASE}/api/applicants/internal/upload-resume`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData
+        });
+        const uploadData = await uploadRes.json();
+        
+        if (uploadData.success) {
+          resumeUploaded = true;
+        } else if (uploadData.error?.message === 'AI did not extract valid email from resume') {
+          showToast('CV uploaded but AI could not verify. Applying anyway...', 'warning');
+          resumeUploaded = true;
+        } else {
+          console.warn('CV upload failed:', uploadData.error?.message);
+        }
+      }
+      
       const res = await fetch(`${API_BASE}/api/profile/apply/${params.id}`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ coverLetter: coverLetter || 'Optional cover letter' })
+        body: JSON.stringify({ coverLetter: coverLetter || '' })
       });
       const data = await res.json();
-      if (data.success) { showToast('Application submitted!', 'success'); setApplied(true); }
+      if (data.success) { 
+        showToast(resumeUploaded ? 'Application with CV submitted!' : 'Application submitted!', 'success'); 
+        setApplied(true); 
+      }
       else { showToast(data.error?.message || 'Failed to apply', 'error'); }
     } catch (error) { showToast('Failed to apply', 'error'); }
     finally { setApplying(false); }

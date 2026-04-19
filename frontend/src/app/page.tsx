@@ -18,6 +18,7 @@ import {
   Lightbulb,
   Clock
 } from 'lucide-react';
+import AIChatbot from '@/components/ui/AIChatbot';
 
 const BRAND_COLOR = "#2b71f0";
 
@@ -295,7 +296,7 @@ export default function LandingPage() {
                 
                 <div className="p-6 border-t border-slate-100">
                   <Link 
-                    href="/login" 
+                    href="/auth" 
                     onClick={() => setIsMenuOpen(false)}
                     className="block w-full py-4 rounded-xl text-white text-center font-bold text-sm"
                     style={{ backgroundColor: BRAND_COLOR }}
@@ -338,7 +339,7 @@ export default function LandingPage() {
           </Link>
           <div className="hidden lg:flex items-center gap-8 font-semibold text-sm text-slate-600">
             <Link href="#jobs" className="hover:text-slate-900 transition-colors">{t.findJob}</Link>
-            <Link href="/login" className="px-6 py-2.5 rounded-xl bg-blue-600 text-white font-semibold transition-all hover:shadow-md hover:bg-blue-700">Get Started</Link>
+            <Link href="/auth" className="px-6 py-2.5 rounded-xl bg-blue-600 text-white font-semibold transition-all hover:shadow-md hover:bg-blue-700">Get Started</Link>
           </div>
           <div className="hidden md:flex items-center gap-2">
             <select 
@@ -671,6 +672,8 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
+      
+      <AIChatbot isGuest={true} />
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
+import { useRouter } from 'next/navigation';
 import { Search, X, Briefcase, ChevronLeft, ChevronRight, MapPin, Clock } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import JobCard from '@/components/JobCard';
@@ -25,6 +26,7 @@ interface Job {
 
 export default function ApplicantJobsPage() {
   const { token } = useAuth();
+  const router = useRouter();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -272,7 +274,7 @@ export default function ApplicantJobsPage() {
           job={selectedJob}
           isOpen={showPopup}
           onClose={() => setShowPopup(false)}
-          onApply={() => setShowPopup(false)}
+          onApply={() => { setShowPopup(false); router.push(`/applicant/jobs/${selectedJob?._id}`); }}
         />
       </div>
     </div>

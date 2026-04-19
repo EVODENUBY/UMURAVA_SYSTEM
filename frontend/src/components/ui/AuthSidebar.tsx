@@ -10,6 +10,7 @@ interface AuthSidebarProps {
   title: string;
   subtitle: string;
   onLanguageChange?: (lang: 'en' | 'fr' | 'rw') => void;
+  className?: string;
 }
 
 const languages = [
@@ -18,7 +19,7 @@ const languages = [
   { code: 'rw', label: 'Kinyarwanda' },
 ];
 
-export default function AuthSidebar({ title, subtitle, onLanguageChange }: AuthSidebarProps) {
+export default function AuthSidebar({ title, subtitle, onLanguageChange, className = "" }: AuthSidebarProps) {
   const [currentLang, setCurrentLang] = useState('en');
 
   const handleLangChange = (code: string) => {
@@ -40,7 +41,7 @@ export default function AuthSidebar({ title, subtitle, onLanguageChange }: AuthS
   ];
 
   return (
-    <div className="hidden lg:block fixed left-0 top-0 h-screen w-[30%] xl:w-[32%] bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 overflow-hidden z-30">
+    <div className={`hidden lg:block fixed left-0 top-0 h-screen w-[30%] xl:w-[32%] bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 overflow-hidden z-30 ${className}`}>
       <div className="absolute inset-0 bg-gradient-to-br from-blue-600/50 to-blue-800/50" />
 
       <div className="relative z-10 flex flex-col h-full p-6 xl:p-8 text-white">
