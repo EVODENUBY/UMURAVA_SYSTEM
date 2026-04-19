@@ -1,7 +1,6 @@
 import express, { Application } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import morgan from 'morgan';
 import dotenv from 'dotenv';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
@@ -24,15 +23,11 @@ import adminRoutes from './routes/admin.routes';
 import systemRoutes from './routes/system.routes';
 import testRoutes from './routes/test.routes';
 
-// Import middleware
+//  middleware
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware';
-
-// Import config
-import logger from './utils/logger';
-
 const app: Application = express();
 
-// Swagger configuration
+// Swagger 
 const swaggerOptions = {
   definition: {
     openapi: '3.0.0',
@@ -43,8 +38,8 @@ const swaggerOptions = {
       contact: { name: 'API Support' }
     },
     servers: [
-      { url: `http://localhost:${process.env.PORT || 5000}`, description: 'Development server' },
-      { url: 'https://recruiter-ai-platform.onrender.com', description: 'Production server' }
+      { url: 'https://recruiter-ai-platform.onrender.com', description: 'Production server' },
+      { url: `http://localhost:${process.env.PORT || 5000}`, description: 'Development server' }
     ],
     tags: [
       { name: 'Auth', description: 'Authentication - Register, Login, Get Me' },
