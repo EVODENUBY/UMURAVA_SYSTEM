@@ -529,10 +529,11 @@ router.post('/upload-resume', protect, uploadMiddleware.uploadSingle, async (req
 
     const { path: filePath, originalname, mimetype } = req.file;
     const { jobId } = req.body;
+    const absoluteFilePath = path.resolve(filePath);
 
-    logger.info('Processing resume upload', { filename: originalname, filePath, mimetype });
+    logger.info('Processing resume upload', { filename: originalname, filePath, absoluteFilePath, mimetype });
 
-    if (!filePath || !fs.existsSync(filePath)) {
+    if (!filePath || !fs.existsSync(absoluteFilePath)) {
       return res.status(400).json({ success: false, error: { message: 'File not found on server' } });
     }
 
@@ -544,7 +545,7 @@ router.post('/upload-resume', protect, uploadMiddleware.uploadSingle, async (req
       });
     }
 
-    const buffer = fs.readFileSync(filePath);
+    const buffer = fs.readFileSync(absoluteFilePath);
     
     let parsedResume;
     try {
@@ -578,7 +579,7 @@ router.post('/upload-resume', protect, uploadMiddleware.uploadSingle, async (req
       const existingApplication = await InternalApplicant.findOne({ userId, jobId });
       if (existingApplication) {
         existingApplication.resumeText = parsedResume.text;
-        existingApplication.resumeFilePath = filePath;
+        existingApplication.resumeFilePath = absoluteFilePath;
         await existingApplication.save();
         application = existingApplication;
       } else {
@@ -587,7 +588,7 @@ router.post('/upload-resume', protect, uploadMiddleware.uploadSingle, async (req
           talentProfileId: profile._id,
           jobId: new mongoose.Types.ObjectId(jobId),
           resumeText: parsedResume.text,
-          resumeFilePath: filePath,
+          resumeFilePath: absoluteFilePath,
           status: 'applied',
           appliedAt: new Date(),
           source: 'portal'
@@ -598,7 +599,7 @@ router.post('/upload-resume', protect, uploadMiddleware.uploadSingle, async (req
         userId,
         talentProfileId: profile._id,
         resumeText: parsedResume.text,
-        resumeFilePath: filePath,
+        resumeFilePath: absoluteFilePath,
         source: 'portal'
       });
     }
