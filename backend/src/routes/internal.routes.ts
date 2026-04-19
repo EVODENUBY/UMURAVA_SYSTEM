@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import path from 'path';
 import { protect, authorize } from '../middlewares/auth.middleware';
 import InternalApplicant from '../models/internalApplicant.model';
 import TalentProfile from '../models/talentProfile.model';
@@ -364,17 +365,20 @@ router.get('/my-cv', async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, error: { message: 'No CV uploaded yet' } });
     }
 
-    console.log('[DEBUG] my-cv: Found CV, path:', application.resumeFilePath);
+    const uploadsDir = process.env.UPLOAD_DIR || 'uploads';
+    const absolutePath = path.resolve(application.resumeFilePath);
 
-    if (!fs.existsSync(application.resumeFilePath)) {
-      console.log('[DEBUG] my-cv: CV file NOT on disk:', application.resumeFilePath);
+    console.log('[DEBUG] my-cv: Found CV, path:', application.resumeFilePath, 'absolute:', absolutePath);
+
+    if (!fs.existsSync(absolutePath)) {
+      console.log('[DEBUG] my-cv: CV file NOT on disk:', absolutePath);
       return res.status(404).json({ success: false, error: { message: 'CV file not found on server' } });
     }
 
     const fileName = `my-cv-${application._id}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
-    res.sendFile(application.resumeFilePath);
+    res.sendFile(absolutePath);
   } catch (error) {
     logger.error('Error retrieving CV:', error);
     res.status(500).json({ success: false, error: { message: 'Error retrieving CV' } });
@@ -434,14 +438,16 @@ router.get('/my-cv/:id', protect, async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, error: { message: 'No CV uploaded' } });
     }
 
-    if (!fs.existsSync(application.resumeFilePath)) {
+    const absolutePath = path.resolve(application.resumeFilePath);
+
+    if (!fs.existsSync(absolutePath)) {
       return res.status(404).json({ success: false, error: { message: 'CV file not found' } });
     }
 
     const fileName = `my-cv.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
-    res.sendFile(application.resumeFilePath);
+    res.sendFile(absolutePath);
   } catch (error) {
     logger.error('Error retrieving CV:', error);
     res.status(500).json({ success: false, error: { message: 'Error retrieving CV' } });
@@ -494,14 +500,16 @@ router.get('/:id/cv', protect, authorize('recruiter', 'admin'), async (req: Requ
       return res.status(404).json({ success: false, error: { message: 'No CV uploaded for this application' } });
     }
 
-    if (!fs.existsSync(application.resumeFilePath)) {
+    const absolutePath = path.resolve(application.resumeFilePath);
+
+    if (!fs.existsSync(absolutePath)) {
       return res.status(404).json({ success: false, error: { message: 'CV file not found on server' } });
     }
 
     const fileName = `cv-${application._id}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
-    res.sendFile(application.resumeFilePath);
+    res.sendFile(absolutePath);
   } catch (error) {
     logger.error('Error retrieving CV:', error);
     res.status(500).json({ success: false, error: { message: 'Error retrieving CV' } });
