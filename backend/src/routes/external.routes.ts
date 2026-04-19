@@ -169,6 +169,153 @@ router.post('/', protect, authorize('recruiter', 'admin'), async (req: Request, 
 
 /**
  * @swagger
+ * /api/applicants/external/template:
+ *   get:
+ *     summary: Download Excel template for bulk applicant upload
+ *     tags: [External Applicants]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Excel template file
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/template', protect, authorize('recruiter', 'admin'), async (_req: Request, res: Response) => {
+  try {
+    const templateData = [
+      {
+        FirstName: 'Evode',
+        LastName: 'muyisingize',
+        Email: 'evode.muyisingize@gmail.com',
+        Phone: '+250788305305',
+        Headline: 'Senior Software Engineer',
+        Bio: 'Experienced software engineer with 5+ years in full-stack development',
+        Location: 'Kigali, Rwanda',
+        
+        Skills: 'JavaScript, React, Node.js, TypeScript, PostgreSQL',
+        SkillLevels: 'Expert, Expert, Advanced, Intermediate',
+        SkillYears: '5, 4, 3, 2',
+        
+        Languages: 'English, Kinyarwanda',
+        LanguageProficiency: 'Fluent, Native',
+        
+        ExperienceCompany: 'Tech Corp, Startup Inc',
+        ExperienceRole: 'Senior Developer, Junior Developer',
+        ExperienceStartDate: '2020-01, 2018-01',
+        ExperienceEndDate: 'Present, 2019-12',
+        ExperienceDescription: 'Led development of main platform, Built REST APIs',
+        ExperienceTechnologies: 'React, Node.js, Python, Django',
+        IsCurrentJob: 'Yes, No',
+        
+        EducationInstitution: 'MIT, Harvard',
+        EducationDegree: 'BS Computer Science, MS Data Science',
+        EducationField: 'Computer Science, Data Science',
+        EducationStartYear: '2014, 2018',
+        EducationEndYear: '2018, 2020',
+        
+        Certifications: 'AWS Solutions Architect, Google Cloud Developer',
+        CertificationIssuer: 'Amazon, Google',
+        CertificationDate: '2021-06, 2020-03',
+        
+        ProjectName: 'Portfolio Site, E-commerce App',
+        ProjectDescription: 'Personal portfolio website, Full-stack e-commerce',
+        ProjectTechnologies: 'React, Node.js',
+        ProjectRole: 'Lead Developer, Full Developer',
+        ProjectLink: 'https://johndoe.dev, https://shop.example.com',
+        ProjectStartDate: '2021-01, 2020-06',
+        ProjectEndDate: '2021-03, 2020-09',
+        
+        AvailabilityStatus: 'Open to Opportunities',
+        AvailabilityType: 'Full-time',
+        AvailabilityStartDate: '2024-01-01',
+        
+        LinkedIn: 'https://linkedin.com/in/johndoe',
+        GitHub: 'https://github.com/johndoe',
+        Portfolio: 'https://johndoe.dev',
+        
+        ResumeLink: 'https://linkedin.com/in/evode-muyisingizemwese',
+        
+        ApplicationCompany: 'Umurava',
+        ApplicationDate: '2024-04-01',
+        Source: 'LinkedIn'
+      },
+      {
+        FirstName: 'Sandra',
+        LastName: ' Smith',
+        Email: 'jane.smith@example.com',
+        Phone: '+0987654321',
+        Headline: 'Full Stack Developer',
+        Bio: 'Passionate about building scalable web applications',
+        Location: 'Nairobi, Kenya',
+        
+        Skills: 'Python, Django, React, PostgreSQL, Docker',
+        SkillLevels: 'Expert, Advanced, Advanced, Intermediate, Beginner',
+        SkillYears: '4, 3, 3, 2, 1',
+        
+        Languages: 'English, Swahili',
+        LanguageProficiency: 'Fluent, Native',
+        
+        ExperienceCompany: 'Google, Microsoft',
+        ExperienceRole: 'Software Engineer, Intern',
+        ExperienceStartDate: '2021-06, 2020-05',
+        ExperienceEndDate: 'Present, 2020-08',
+        ExperienceDescription: 'Worked on cloud infrastructure, Assisted in Azure development',
+        ExperienceTechnologies: 'Go, Kubernetes, C#',
+        IsCurrentJob: 'Yes, No',
+        
+        EducationInstitution: 'Stanford, UC Berkeley',
+        EducationDegree: 'BS Software Engineering, High School',
+        EducationField: 'Software Engineering, Science',
+        EducationStartYear: '2017, 2013',
+        EducationEndYear: '2021, 2017',
+        
+        Certifications: 'Python Certified',
+        CertificationIssuer: 'Python Institute',
+        CertificationDate: '2022-01',
+        
+        ProjectName: 'AI Chatbot',
+        ProjectDescription: 'AI-powered customer support chatbot',
+        ProjectTechnologies: 'Python, TensorFlow',
+        ProjectRole: 'Lead Developer',
+        ProjectLink: 'https://chatbot.example.com',
+        ProjectStartDate: '2022-01',
+        ProjectEndDate: '2022-06',
+        
+        AvailabilityStatus: 'Available',
+        AvailabilityType: 'Full-time',
+        AvailabilityStartDate: '2024-02-01',
+        
+        LinkedIn: 'https://linkedin.com/in/janesmith',
+        GitHub: 'https://github.com/janesmith',
+        Portfolio: 'https://janesmith.dev',
+        
+        ResumeLink: 'https://linkedin.com/in/janesmith',
+        
+        ApplicationCompany: 'Umurava',
+        ApplicationDate: '2024-04-02',
+        Source: 'Referral'
+      }
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Applicants Template');
+
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=applicants_template.xlsx');
+
+    res.send(buffer);
+  } catch (error) {
+    logger.error('Error generating template:', error);
+    res.status(500).json({ success: false, error: { message: 'Error generating template' } });
+  }
+});
+
+/**
+ * @swagger
  * /api/applicants/external/{id}:
  *   get:
  *     summary: Get external applicant by ID
@@ -428,164 +575,6 @@ router.put('/:id/status', protect, authorize('recruiter', 'admin'), async (req: 
   } catch (error) {
     logger.error('Error updating status:', error);
     res.status(500).json({ success: false, error: { message: 'Server error updating status' } });
-  }
-});
-
-/**
- * @swagger
- * /api/applicants/external/template:
- *   get:
- *     summary: Download Excel template for bulk applicant upload
- *     tags: [External Applicants]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Excel template file
- *       401:
- *         description: Unauthorized
- */
-router.get('/template', protect, authorize('recruiter', 'admin'), async (_req: Request, res: Response) => {
-  try {
-    const templateData = [
-      {
-        // Basic Info
-        FirstName: 'Evode',
-        LastName: 'muyisingize',
-        Email: 'evode.muyisingize@gmail.com',
-        Phone: '+250788305305',
-        Headline: 'Senior Software Engineer',
-        Bio: 'Experienced software engineer with 5+ years in full-stack development',
-        Location: 'Kigali, Rwanda',
-        
-        // Skills (comma-separated)
-        Skills: 'JavaScript, React, Node.js, TypeScript, PostgreSQL',
-        SkillLevels: 'Expert, Expert, Advanced, Intermediate',
-        SkillYears: '5, 4, 3, 2',
-        
-        // Languages
-        Languages: 'English, Kinyarwanda',
-        LanguageProficiency: 'Fluent, Native',
-        
-        // Experience (comma-separated for multiple)
-        ExperienceCompany: 'Tech Corp, Startup Inc',
-        ExperienceRole: 'Senior Developer, Junior Developer',
-        ExperienceStartDate: '2020-01, 2018-01',
-        ExperienceEndDate: 'Present, 2019-12',
-        ExperienceDescription: 'Led development of main platform, Built REST APIs',
-        ExperienceTechnologies: 'React, Node.js, Python, Django',
-        IsCurrentJob: 'Yes, No',
-        
-        // Education (comma-separated)
-        EducationInstitution: 'MIT, Harvard',
-        EducationDegree: 'BS Computer Science, MS Data Science',
-        EducationField: 'Computer Science, Data Science',
-        EducationStartYear: '2014, 2018',
-        EducationEndYear: '2018, 2020',
-        
-        // Certifications (comma-separated)
-        Certifications: 'AWS Solutions Architect, Google Cloud Developer',
-        CertificationIssuer: 'Amazon, Google',
-        CertificationDate: '2021-06, 2020-03',
-        
-        // Projects (comma-separated)
-        ProjectName: 'Portfolio Site, E-commerce App',
-        ProjectDescription: 'Personal portfolio website, Full-stack e-commerce',
-        ProjectTechnologies: 'React, Node.js',
-        ProjectRole: 'Lead Developer, Full Developer',
-        ProjectLink: 'https://johndoe.dev, https://shop.example.com',
-        ProjectStartDate: '2021-01, 2020-06',
-        ProjectEndDate: '2021-03, 2020-09',
-        
-        // Availability
-        AvailabilityStatus: 'Open to Opportunities',
-        AvailabilityType: 'Full-time',
-        AvailabilityStartDate: '2024-01-01',
-        
-        // Social Links
-        LinkedIn: 'https://linkedin.com/in/johndoe',
-        GitHub: 'https://github.com/johndoe',
-        Portfolio: 'https://johndoe.dev',
-        
-        // Resume Link (optional)
-        ResumeLink: 'https://linkedin.com/in/evode-muyisingizemwese',
-        
-        // Company & Date (for tracking)
-        ApplicationCompany: 'Umurava',
-        ApplicationDate: '2024-04-01',
-        Source: 'LinkedIn'
-      },
-      {
-        FirstName: 'Sandra',
-        LastName: ' Smith',
-        Email: 'jane.smith@example.com',
-        Phone: '+0987654321',
-        Headline: 'Full Stack Developer',
-        Bio: 'Passionate about building scalable web applications',
-        Location: 'Nairobi, Kenya',
-        
-        Skills: 'Python, Django, React, PostgreSQL, Docker',
-        SkillLevels: 'Expert, Advanced, Advanced, Intermediate, Beginner',
-        SkillYears: '4, 3, 3, 2, 1',
-        
-        Languages: 'English, Swahili',
-        LanguageProficiency: 'Fluent, Native',
-        
-        ExperienceCompany: 'Google, Microsoft',
-        ExperienceRole: 'Software Engineer, Intern',
-        ExperienceStartDate: '2021-06, 2020-05',
-        ExperienceEndDate: 'Present, 2020-08',
-        ExperienceDescription: 'Worked on cloud infrastructure, Assisted in Azure development',
-        ExperienceTechnologies: 'Go, Kubernetes, C#',
-        IsCurrentJob: 'Yes, No',
-        
-        EducationInstitution: 'Stanford, UC Berkeley',
-        EducationDegree: 'BS Software Engineering, High School',
-        EducationField: 'Software Engineering, Science',
-        EducationStartYear: '2017, 2013',
-        EducationEndYear: '2021, 2017',
-        
-        Certifications: 'Python Certified',
-        CertificationIssuer: 'Python Institute',
-        CertificationDate: '2022-01',
-        
-        ProjectName: 'AI Chatbot',
-        ProjectDescription: 'AI-powered customer support chatbot',
-        ProjectTechnologies: 'Python, TensorFlow',
-        ProjectRole: 'Lead Developer',
-        ProjectLink: 'https://chatbot.example.com',
-        ProjectStartDate: '2022-01',
-        ProjectEndDate: '2022-06',
-        
-        AvailabilityStatus: 'Available',
-        AvailabilityType: 'Full-time',
-        AvailabilityStartDate: '2024-02-01',
-        
-        LinkedIn: 'https://linkedin.com/in/janesmith',
-        GitHub: 'https://github.com/janesmith',
-        Portfolio: 'https://janesmith.dev',
-        
-        ResumeLink: 'https://linkedin.com/in/janesmith',
-        
-        ApplicationCompany: 'Umurava',
-        ApplicationDate: '2024-04-02',
-        Source: 'Referral'
-      }
-    ];
-
-    const worksheet = XLSX.utils.json_to_sheet(templateData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Applicants Template');
-
-    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=applicants_template.xlsx');
-
-    res.send(buffer);
-  } catch (error) {
-    logger.error('Error generating template:', error);
-    res.status(500).json({ success: false, error: { message: 'Error generating template' } });
   }
 });
 
