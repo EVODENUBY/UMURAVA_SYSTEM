@@ -21,7 +21,7 @@ import {
   Settings,
 } from 'lucide-react';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://recruiter-ai-platform.onrender.com';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'https://recruiter-ai-platform.onrender.com';
 const AUTH_STORAGE_KEY = 'umurava_auth';
 
 type Tab = 'profile' | 'notifications' | 'security' | 'privacy';

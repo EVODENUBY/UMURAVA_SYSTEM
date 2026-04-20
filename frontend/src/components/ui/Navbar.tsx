@@ -33,6 +33,12 @@ interface Notification {
   link?: string;
 }
 
+interface MenuItem {
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  href: string;
+}
+
 interface NavbarProps {
   onToggleSidebar?: () => void;
   sidebarCollapsed?: boolean;
@@ -86,10 +92,17 @@ export default function Navbar({ onToggleSidebar, sidebarCollapsed, onMobileMenu
     window.location.href = '/login';
   };
 
-  const menuItems = [
+  const defaultMenuItems = [
     { label: 'Profile', icon: UserCircle, href: '/applicant/profile' },
     { label: 'Settings', icon: Settings, href: '/applicant/settings' },
   ];
+
+  const recruiterMenuItems = [
+    { label: 'Dashboard', icon: UserCircle, href: '/recruiter' },
+    { label: 'Settings', icon: Settings, href: '/recruiter/settings' },
+  ];
+
+  const menuItems = user?.role === 'recruiter' || user?.role === 'admin' ? recruiterMenuItems : defaultMenuItems;
 
   const toggleSidebars = () => {
     if (onToggleSidebar) {

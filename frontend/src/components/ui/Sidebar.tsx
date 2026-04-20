@@ -25,6 +25,13 @@ export default function Sidebar({ links, collapsed = false, onToggle }: SidebarP
   const { logout, user } = useAuth();
   const router = useRouter();
 
+  const getSettingsHref = () => {
+    if (user?.role === 'recruiter' || user?.role === 'admin') {
+      return '/recruiter/settings';
+    }
+    return '/applicant/settings';
+  };
+
   const handleLogout = () => {
     logout();
     router.push('/');
@@ -110,7 +117,7 @@ export default function Sidebar({ links, collapsed = false, onToggle }: SidebarP
       {/* Bottom Actions - Only Logout */}
       <div className={`flex-shrink-0 space-y-1 p-2 ${collapsed ? 'px-1' : ''} ${!collapsed ? 'border-t border-white/5' : ''}`}>
         <button 
-          onClick={() => router.push('/applicant/settings')}
+          onClick={() => router.push(getSettingsHref())}
           className={`
             w-full flex items-center gap-3 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/5 transition-all
             ${collapsed ? 'justify-center px-2' : 'px-3'}
