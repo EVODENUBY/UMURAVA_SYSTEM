@@ -208,7 +208,7 @@ export default function AnalyticsPage() {
               </Link>
             ))}
             {(!analytics?.jobs || analytics.jobs.length === 0) && (
-              <p className="text-slate-500 text-center py-4">No jobs yet</p>
+              <p className="text-slate-500 text-center py-4">No jobs available</p>
             )}
           </div>
         </div>
