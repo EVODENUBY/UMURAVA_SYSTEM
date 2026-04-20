@@ -32,7 +32,7 @@ interface Job {
   tags?: string[];
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://recruiter-ai-platform.onrender.com';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'https://recruiter-ai-platform.onrender.com';
 
 export default function JobDetailPage() {
   const params = useParams();

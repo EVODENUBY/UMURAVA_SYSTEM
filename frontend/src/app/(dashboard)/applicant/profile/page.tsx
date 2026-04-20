@@ -14,7 +14,7 @@ import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 
 const BRAND_COLOR = "#2b71f0";
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://recruiter-ai-platform.onrender.com';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'https://recruiter-ai-platform.onrender.com';
 
 type StepKey = 'basic' | 'skills' | 'experience' | 'education' | 'certifications' | 'projects' | 'availability' | 'social';
 

@@ -4,7 +4,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { useRouter } from 'next/navigation';
 import { User, AuthState, UserRole, ROLES, ROUTES } from '@/lib/types';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://recruiter-ai-platform.onrender.com';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'https://recruiter-ai-platform.onrender.com';
 
 interface AuthContextType extends AuthState {
   login: (email: string, password: string, role?: UserRole) => Promise<User>;
