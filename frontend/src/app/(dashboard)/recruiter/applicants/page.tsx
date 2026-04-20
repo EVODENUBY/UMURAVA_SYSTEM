@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { api } from '@/lib/api';
+import { API_BASE_URL } from '@/lib/constants';
 import { FaSearch, FaFilter, FaUserPlus, FaUpload, FaDownload, FaEye, FaEdit, FaTrash, FaAngleLeft, FaAngleRight, FaBriefcase, FaGraduationCap, FaLanguage, FaStar, FaLinkedin, FaGithub, FaGlobe } from 'react-icons/fa';
 import { SkeletonTable, SkeletonCard } from '@/components/ui/Skeleton';
 
@@ -308,7 +309,7 @@ export default function ApplicantsPage() {
     if (uploadJobId) formData.append('jobId', uploadJobId);
     
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/applicants/external/upload-bulk`, {
+      const response = await fetch(`${API_BASE_URL}/applicants/external/upload-bulk`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
@@ -361,7 +362,7 @@ export default function ApplicantsPage() {
     formData.append('file', file);
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/applicants/external/preview`, {
+      const response = await fetch(`${API_BASE_URL}/applicants/external/preview`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
@@ -386,8 +387,7 @@ export default function ApplicantsPage() {
 
   const handleDownloadCV = async (applicationId: string) => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-      const response = await fetch(`${apiUrl}/api/applicants/internal/${applicationId}/cv`, {
+      const response = await fetch(`${API_BASE_URL}/applicants/internal/${applicationId}/cv`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.ok) {
@@ -968,8 +968,7 @@ export default function ApplicantsPage() {
                 type="button"
                 onClick={async () => {
                   try {
-                    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-                    const response = await fetch(`${apiUrl}/applicants/external/template`, {
+                    const response = await fetch(`${API_BASE_URL}/applicants/external/template`, {
                       headers: { 
                         Authorization: `Bearer ${token}`,
                         'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
