@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import authController from '../controllers/auth.controller';
 import { protect } from '../middlewares/auth.middleware';
+import { uploadAvatar as uploadAvatarMiddleware } from '../middlewares/upload.middleware';
 
 const router = Router();
 
 /**
  * @swagger
- * /auth/register:
+ * /api/auth/register:
  *   post:
  *     summary: Register a new user (applicant)
  *     tags: [Auth]
@@ -51,7 +52,7 @@ router.post('/register', authController.register);
 
 /**
  * @swagger
- * /auth/login:
+ * /api/auth/login:
  *   post:
  *     summary: Login user
  *     tags: [Auth]
@@ -83,7 +84,7 @@ router.post('/login', authController.login);
 
 /**
  * @swagger
- * /auth/me:
+ * /api/auth/me:
  *   get:
  *     summary: Get current user profile
  *     tags: [Auth]
@@ -96,5 +97,33 @@ router.post('/login', authController.login);
  *         description: Unauthorized
  */
 router.get('/me', protect, authController.getMe);
+
+/**
+ * @swagger
+ * /api/auth/avatar:
+ *   post:
+ *     summary: Upload user avatar
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               avatar:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Avatar uploaded successfully
+ *       400:
+ *         description: No file uploaded
+ *       401:
+ *         description: Unauthorized
+ */
+router.post('/avatar', protect, uploadAvatarMiddleware, authController.uploadAvatar);
 
 export default router;

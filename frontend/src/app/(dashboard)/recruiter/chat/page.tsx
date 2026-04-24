@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
-import { api } from '@/lib/api';
+import { api, ENDPOINTS } from '@/lib/api';
 import { FaPaperPlane, FaTrash, FaLightbulb, FaQuestionCircle, FaFileAlt, FaUser, FaRobot, FaComments } from 'react-icons/fa';
 import { Send } from 'lucide-react';
 import { SkeletonText, SkeletonAvatar } from '@/components/ui/Skeleton';
@@ -72,7 +72,7 @@ export default function ChatPage() {
 
   const fetchJobs = async () => {
     try {
-      const response = await api.get<{ success: boolean; data: { jobs: Job[] } }>('/jobs/all', token || undefined);
+      const response = await api.get<{ success: boolean; data: { jobs: Job[] } }>(ENDPOINTS.JOBS.ALL, token || undefined);
       if (response.success) {
         setJobs(response.data.jobs);
         if (response.data.jobs.length > 0) {

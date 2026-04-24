@@ -87,6 +87,36 @@ export const uploadSingle = multer({
   }
 }).single('resume');
 
+// Single file upload for avatars
+export const uploadAvatar = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      const avatarDir = path.join(uploadsDir, 'avatars');
+      if (!fs.existsSync(avatarDir)) {
+        fs.mkdirSync(avatarDir, { recursive: true });
+      }
+      cb(null, avatarDir);
+    },
+    filename: (_req, file, cb) => {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      const ext = path.extname(file.originalname);
+      cb(null, 'avatar-' + uniqueSuffix + ext);
+    }
+  }),
+  fileFilter: (_req, file, cb) => {
+    const allowedMimetypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (allowedMimetypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(createError('Only image files are allowed for avatars', 400) as Error);
+    }
+  },
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB
+    files: 1
+  }
+}).single('avatar');
+
 // Single file upload with any field name (for general file uploads)
 export const uploadAny = multer({
   storage: csvStorage,

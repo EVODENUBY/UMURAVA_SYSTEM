@@ -138,7 +138,7 @@ export const getMe = async (req: Request, res: Response) => {
     if (!userId) {
       return res.status(401).json({ success: false, error: { message: 'Unauthorized' } });
     }
-
+    
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
@@ -146,7 +146,7 @@ export const getMe = async (req: Request, res: Response) => {
         error: { message: 'User not found' }
       });
     }
-
+    
     res.json({
       success: true,
       data: {
@@ -169,6 +169,38 @@ export const getMe = async (req: Request, res: Response) => {
   }
 };
 
+export const uploadAvatar = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: { message: 'Unauthorized' } });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: { message: 'No file uploaded' } });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: { message: 'User not found' } });
+    }
+
+    // Save the file path or URL to the user's avatar field
+    const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+    user.avatar = avatarUrl;
+    await user.save();
+
+    res.json({
+      success: true,
+      data: {
+        avatar: avatarUrl
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: { message: 'Server error uploading avatar' } });
+  }
+};
+
 export const registerValidation = [
   (req: Request, res: Response, next: any) => {
     const { email, password } = req.body;
@@ -188,4 +220,4 @@ export const registerValidation = [
   }
 ];
 
-export default { register, login, getMe, registerValidation };
+export default { register, login, getMe, uploadAvatar, registerValidation };

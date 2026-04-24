@@ -25,10 +25,13 @@ export async function apiClient<T>(
 ): Promise<T> {
   const { token, headers, ...rest } = options;
   
+  // Don't set Content-Type for FormData (browser will set it with boundary)
+  const isFormData = rest.body instanceof FormData;
+  
   const config: RequestInit = {
     ...rest,
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(token && { Authorization: `Bearer ${token}` }),
       ...headers,
     },
@@ -43,10 +46,18 @@ export const api = {
     apiClient<T>(endpoint, { method: 'GET', token }),
   
   post: <T>(endpoint: string, data: unknown, token?: string) =>
-    apiClient<T>(endpoint, { method: 'POST', body: JSON.stringify(data), token }),
+    apiClient<T>(endpoint, { 
+      method: 'POST', 
+      body: data instanceof FormData ? data : JSON.stringify(data), 
+      token 
+    }),
   
   put: <T>(endpoint: string, data: unknown, token?: string) =>
-    apiClient<T>(endpoint, { method: 'PUT', body: JSON.stringify(data), token }),
+    apiClient<T>(endpoint, { 
+      method: 'PUT', 
+      body: data instanceof FormData ? data : JSON.stringify(data), 
+      token 
+    }),
   
   delete: <T>(endpoint: string, token?: string) =>
     apiClient<T>(endpoint, { method: 'DELETE', token }),

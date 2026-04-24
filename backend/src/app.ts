@@ -43,7 +43,7 @@ const swaggerOptions = {
       { url: `http://localhost:${process.env.PORT || 5000}`, description: 'Development server' }
     ],
     tags: [
-      { name: 'Auth', description: 'Authentication - Register, Login, Get Me' },
+      { name: 'Auth', description: 'Authentication - Register, Login, Get Me, Upload avatar' },
       { name: 'Jobs', description: 'Job postings - Create, Read, Update, Delete, Bias Detection' },
       { name: 'Profile', description: 'Talent Profile - Create, Update, Get, Completion, Recommendations, Improve Suggestions' },
       { name: 'Internal Applicants', description: 'Internal applicants - Apply to jobs, List, Update status' },
@@ -415,7 +415,7 @@ app.get('/health', (_req, res) => {
 });
 
 // API routes
-app.use('/auth', authRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/jobs', jobRoutes);
 app.use('/api/applicants', applicantRoutes);
 app.use('/api/applicants/internal', internalRoutes);

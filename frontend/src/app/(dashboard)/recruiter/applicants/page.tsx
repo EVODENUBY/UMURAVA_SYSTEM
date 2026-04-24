@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
-import { api } from '@/lib/api';
+import { api, ENDPOINTS } from '@/lib/api';
 import { API_BASE_URL } from '@/lib/constants';
 import { FaSearch, FaFilter, FaUserPlus, FaUpload, FaDownload, FaEye, FaEdit, FaTrash, FaAngleLeft, FaAngleRight, FaBriefcase, FaGraduationCap, FaLanguage, FaStar, FaLinkedin, FaGithub, FaGlobe } from 'react-icons/fa';
 import { SkeletonTable, SkeletonCard } from '@/components/ui/Skeleton';
@@ -161,7 +161,7 @@ export default function ApplicantsPage() {
 
   const fetchJobs = useCallback(async () => {
     try {
-      const response = await api.get<{ success: boolean; data: { jobs: Job[] } }>('/jobs/all?status=published', token || undefined);
+      const response = await api.get<{ success: boolean; data: { jobs: Job[] } }>(`${ENDPOINTS.JOBS.ALL}?status=published`, token || undefined);
       if (response.success) {
         setJobs(response.data.jobs);
       }
@@ -244,7 +244,7 @@ export default function ApplicantsPage() {
         jobId: form.jobId,
         resumeLink: form.resumeLink || undefined
       };
-      await api.post('/applicants/external', payload, token || undefined);
+      await api.post(ENDPOINTS.APPLICANTS.EXTERNAL, payload, token || undefined);
       setShowModal(false);
       setForm({ name: '', email: '', phone: '', skills: '', jobId: '', resumeLink: '' });
       fetchExternalApplicants();
@@ -258,10 +258,10 @@ export default function ApplicantsPage() {
   const handleStatusUpdate = async (id: string, status: string) => {
     try {
       if (activeTab === 'external') {
-        await api.put(`/applicants/external/${id}/status`, { status }, token || undefined);
+        await api.put(ENDPOINTS.APPLICANTS.EXTERNAL_STATUS(id), { status }, token || undefined);
         fetchExternalApplicants();
       } else {
-        await api.put(`/applicants/internal/${id}/status`, { status }, token || undefined);
+        await api.put(ENDPOINTS.APPLICANTS.INTERNAL_STATUS(id), { status }, token || undefined);
         fetchInternalApplicants();
       }
       setSelectedApplicant(null);
@@ -275,7 +275,7 @@ export default function ApplicantsPage() {
   const handleUpdateApplicant = async (applicant: ExternalApplicant) => {
     try {
       const { _id, ...updateData } = applicant;
-      await api.put(`/applicants/external/${_id}`, updateData, token || undefined);
+      await api.put(ENDPOINTS.APPLICANTS.EXTERNAL_DETAIL(_id), updateData, token || undefined);
       fetchExternalApplicants();
       setSelectedApplicant(null);
       showToast('Applicant updated successfully', 'success');
@@ -288,7 +288,7 @@ export default function ApplicantsPage() {
   const handleDelete = async (id: string) => {
     showConfirmation('Are you sure you want to delete this applicant?', async () => {
       try {
-        await api.delete(`/applicants/external/${id}`, token || undefined);
+        await api.delete(ENDPOINTS.APPLICANTS.EXTERNAL_DETAIL(id), token || undefined);
         fetchExternalApplicants();
         showToast('Applicant deleted successfully', 'success');
       } catch (error) {
@@ -340,7 +340,7 @@ export default function ApplicantsPage() {
   const handleBulkDelete = async () => {
     showConfirmation(`Are you sure you want to delete ${selectedExternalIds.length} applicant(s)?`, async () => {
     try {
-      await api.post('/applicants/external/bulk-delete', { ids: selectedExternalIds }, token || undefined);
+      await api.post(ENDPOINTS.APPLICANTS.EXTERNAL_BULK_DELETE, { ids: selectedExternalIds }, token || undefined);
       setSelectedExternalIds([]);
       setSelectAllExternal(false);
       fetchExternalApplicants();

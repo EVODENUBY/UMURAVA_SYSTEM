@@ -15,6 +15,7 @@ export interface IUser extends Document {
   lastLogin?: Date;
   createdAt: Date;
   updatedAt: Date;
+  fullName?: string; // Virtual field
   comparePassword(candidatePassword: string): Promise<boolean>;
 }
 
@@ -82,5 +83,9 @@ UserSchema.pre('save', async function (next) {
 UserSchema.methods.comparePassword = async function (candidatePassword: string): Promise<boolean> {
   return bcrypt.compare(candidatePassword, this.password);
 };
+
+UserSchema.virtual('fullName').get(function() {
+  return `${this.firstName || ''} ${this.lastName || ''}`.trim();
+});
 
 export default mongoose.model<IUser>('User', UserSchema);
