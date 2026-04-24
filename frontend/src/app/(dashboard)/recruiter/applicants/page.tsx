@@ -187,7 +187,7 @@ export default function ApplicantsPage() {
       params.append('page', currentPage.toString());
       params.append('limit', ITEMS_PER_PAGE.toString());
 
-      const endpoint = `/applicants/external${params.toString() ? `?${params.toString()}` : ''}`;
+      const endpoint = `/api/applicants/external${params.toString() ? `?${params.toString()}` : ''}`;
       const response = await api.get<{ success: boolean; data: { applicants: ExternalApplicant[]; pagination: { total: number; pages: number } } }>(endpoint, token || undefined);
       if (response.success) {
         setExternalApplicants(response.data.applicants);
@@ -209,7 +209,7 @@ export default function ApplicantsPage() {
       params.append('page', currentPage.toString());
       params.append('limit', ITEMS_PER_PAGE.toString());
 
-      const endpoint = `/applicants/internal${params.toString() ? `?${params.toString()}` : ''}`;
+      const endpoint = `/api/applicants/internal${params.toString() ? `?${params.toString()}` : ''}`;
       const response = await api.get<{ success: boolean; data: { applications: InternalApplicant[]; pagination: { total: number; pages: number } } }>(endpoint, token || undefined);
       if (response.success) {
         setInternalApplicants(response.data.applications);
