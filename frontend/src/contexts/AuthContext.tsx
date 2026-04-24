@@ -3,14 +3,16 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { User, AuthState, UserRole, ROLES, ROUTES } from '@/lib/types';
+import { API_BASE_URL } from '@/lib/constants';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'https://recruiter-ai-platform.onrender.com';
+const API_BASE = API_BASE_URL;
 
 interface AuthContextType extends AuthState {
   login: (email: string, password: string, role?: UserRole) => Promise<User>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => void;
   setUser: (user: User | null) => void;
+  refreshUser: () => Promise<void>;
 }
 
 interface RegisterData {
@@ -88,7 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ ...prev, isLoading: true }));
     
     try {
-      const res = await fetch(`${API_BASE}/auth/login`, {
+      const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -99,28 +101,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setState(prev => ({ ...prev, isLoading: false }));
         throw new Error(data.message || 'Login failed');
       }
-
+      
       const apiUser = data.data.user as ApiUser;
       const token = data.data.token;
-
+      
+      const backendBase = API_BASE_URL.replace(/\/api$/, '');
+      const avatarFullUrl = apiUser.avatar ? `${backendBase}${apiUser.avatar}` : undefined;
+      
       const user: User = {
         id: apiUser.id,
         email: apiUser.email,
         fullName: `${apiUser.firstName} ${apiUser.lastName}`.trim(),
         role: apiUser.role as UserRole,
-        avatar: apiUser.avatar,
+        avatar: avatarFullUrl,
       };
-
+      
       const authData = { user, token };
       localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authData));
-
+      
       setState({
         user,
         token,
         isAuthenticated: true,
         isLoading: false,
       });
-
+      
       return user;
     } catch (error) {
       setState(prev => ({ ...prev, isLoading: false }));
@@ -132,7 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ ...prev, isLoading: true }));
     
     try {
-      const res = await fetch(`${API_BASE}/auth/register`, {
+      const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -150,7 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setState(prev => ({ ...prev, isLoading: false }));
         throw new Error(response.message || 'Registration failed');
       }
-
+      
       // Don't auto-login on registration - user must sign in manually
       setState(prev => ({ ...prev, isLoading: false }));
     } catch (error) {
@@ -174,12 +179,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ ...prev, user }));
   };
 
+  const refreshUser = async () => {
+    if (!state.token) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
+        headers: { 'Authorization': `Bearer ${state.token}` },
+      });
+      const data = await res.json();
+      if (data.success && data.data) {
+        const apiUser = data.data;
+        const backendBase = API_BASE_URL.replace(/\/api$/, '');
+        const avatarFullUrl = apiUser.avatar ? `${backendBase}${apiUser.avatar}` : undefined;
+        const user: User = {
+          id: apiUser.id,
+          email: apiUser.email,
+          fullName: `${apiUser.firstName} ${apiUser.lastName}`.trim(),
+          role: apiUser.role as UserRole,
+          avatar: avatarFullUrl,
+        };
+        setState(prev => ({ ...prev, user }));
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user, token: state.token }));
+      }
+    } catch (error) {
+      console.error('Failed to refresh user:', error);
+    }
+  };
+
   const value = {
     ...state,
     login,
     register,
     logout,
     setUser,
+    refreshUser,
     token: state.token,
   };
   

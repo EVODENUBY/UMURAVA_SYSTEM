@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { api } from '@/lib/api';
+import { api, ENDPOINTS } from '@/lib/api';
 import { FaBriefcase, FaUsers, FaFileAlt, FaChartLine, FaCheckCircle, FaClock } from 'react-icons/fa';
 import Link from 'next/link';
 import { SkeletonStats, SkeletonCard } from '@/components/ui/Skeleton';
@@ -28,7 +28,7 @@ export default function RecruiterDashboard() {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await api.get<{ success: boolean; data: Stats }>('/analytics', token || undefined);
+        const response = await api.get<{ success: boolean; data: Stats }>(ENDPOINTS.ANALYTICS.LIST, token || undefined);
         if (response.success) {
           setStats(response.data);
         }

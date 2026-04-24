@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { api } from '@/lib/api';
+import { api, ENDPOINTS } from '@/lib/api';
 import { FaPlay, FaSearch, FaFilter, FaUser, FaStar, FaExclamationTriangle, FaAngleLeft, FaAngleRight } from 'react-icons/fa';
 import { SkeletonTable, SkeletonCard } from '@/components/ui/Skeleton';
 
@@ -66,7 +66,7 @@ export default function ScreeningPage() {
 
   const fetchJobs = async () => {
     try {
-      const response = await api.get<{ success: boolean; data: { jobs: Job[] } }>('/jobs/all?status=published', token || undefined);
+      const response = await api.get<{ success: boolean; data: { jobs: Job[] } }>(`${ENDPOINTS.JOBS.ALL}?status=published`, token || undefined);
       if (response.success) {
         setJobs(response.data.jobs);
         if (response.data.jobs.length > 0) {
@@ -87,7 +87,7 @@ export default function ScreeningPage() {
       params.append('limit', ITEMS_PER_PAGE.toString());
       
       const resultsResponse = await api.get<{ success: boolean; data: { results: ScreeningResult[]; total: number; pages: number } }>(
-        `/screening/results/${selectedJob}?${params.toString()}`,
+        `${ENDPOINTS.SCREENING.RESULTS(selectedJob)}?${params.toString()}`,
         token || undefined
       );
       if (resultsResponse.success) {
@@ -97,7 +97,7 @@ export default function ScreeningPage() {
       }
 
       const statsResponse = await api.get<{ success: boolean; data: { statistics: ScreeningStats } }>(
-        `/screening/stats/${selectedJob}`,
+        ENDPOINTS.SCREENING.STATS(selectedJob),
         token || undefined
       );
       if (statsResponse.success) {
@@ -114,7 +114,7 @@ export default function ScreeningPage() {
     if (!selectedJob) return;
     setRunning(true);
     try {
-      const response = await api.post<{ success: boolean }>('/screening/run', { jobId: selectedJob }, token || undefined);
+      const response = await api.post<{ success: boolean }>(ENDPOINTS.SCREENING.RUN, { jobId: selectedJob }, token || undefined);
       if (response.success) {
         fetchResults();
       }
