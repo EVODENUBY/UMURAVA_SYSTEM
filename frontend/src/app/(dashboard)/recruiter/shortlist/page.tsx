@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { api } from '@/lib/api';
+import { api, ENDPOINTS } from '@/lib/api';
 import { FaUser, FaStar, FaCheck, FaTimes, FaEnvelope, FaPhone } from 'react-icons/fa';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 
@@ -53,7 +53,7 @@ export default function ShortlistPage() {
 
   const fetchJobs = async () => {
     try {
-      const response = await api.get<{ success: boolean; data: { jobs: Job[] } }>('/jobs/all', token || undefined);
+      const response = await api.get<{ success: boolean; data: { jobs: Job[] } }>(ENDPOINTS.JOBS.ALL, token || undefined);
       if (response.success) {
         setJobs(response.data.jobs);
       }
@@ -67,7 +67,7 @@ export default function ShortlistPage() {
     setLoading(true);
     try {
       const data = await api.get<{ success: boolean; data: { shortlisted: ShortlistedCandidate[] } }>(
-        `/shortlist/jobs/${selectedJob}`,
+        ENDPOINTS.SHORTLIST.JOB(selectedJob),
         token || undefined
       );
       if (data.success) {

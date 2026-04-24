@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
-import { api } from '@/lib/api';
+import { api, ENDPOINTS } from '@/lib/api';
 import { FaPlus, FaEdit, FaTrash, FaEye, FaSearch, FaExclamationTriangle, FaChartBar, FaMapMarker, FaClock, FaAngleLeft, FaAngleRight } from 'react-icons/fa';
 import { SkeletonTable, SkeletonCard } from '@/components/ui/Skeleton';
 
@@ -44,7 +44,7 @@ const initialForm = {
   certifications: [] as string[],
   languages: [] as string[],
   location: { address: '', city: '', country: '', remote: false },
-  salary: null as { min: number; max: number; currency: string } | null,
+  salary: { min: 0, max: 0, currency: 'USD' },
   benefits: [] as string[],
   applicationProcess: { steps: ['Apply', 'Screening', 'Interview', 'Offer'] },
   tags: [] as string[],
@@ -52,6 +52,11 @@ const initialForm = {
   expirationDate: '',
   status: 'draft',
 };
+
+const employmentTypes = ['full-time', 'part-time', 'contract', 'internship', 'freelance'];
+const jobLevels = ['entry', 'mid', 'senior', 'lead', 'executive'];
+const statuses = ['draft', 'published', 'closed', 'archived'];
+const currencies = ['USD', 'EUR', 'GBP', 'RWF', 'KES', 'NGN', 'ZAR'];
 
 export default function JobsPage() {
   const { token } = useAuth();
@@ -62,6 +67,12 @@ export default function JobsPage() {
   const [editingJob, setEditingJob] = useState<Job | null>(null);
   const [form, setForm] = useState(initialForm);
   const [skillInput, setSkillInput] = useState('');
+  const [respInput, setRespInput] = useState('');
+  const [certInput, setCertInput] = useState('');
+  const [langInput, setLangInput] = useState('');
+  const [benefitInput, setBenefInput] = useState('');
+  const [tagInput, setTagInput] = useState('');
+  const [eduInput, setEduInput] = useState({ degree: '', field: '', required: true });
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -126,8 +137,7 @@ export default function JobsPage() {
       if (statusFilter) params.append('status', statusFilter);
       params.append('page', currentPage.toString());
       params.append('limit', ITEMS_PER_PAGE.toString());
-      const endpoint = `/jobs/all${params.toString() ? `?${params.toString()}` : ''}`;
-      const response = await api.get<{ success: boolean; data: { jobs: Job[]; total: number; pages: number } }>(endpoint, token || undefined);
+      const response = await api.get<{ success: boolean; data: { jobs: Job[]; total: number; pages: number } }>(`${ENDPOINTS.JOBS.ALL}${params.toString() ? `?${params.toString()}` : ''}`, token || undefined);
       if (response.success) {
         setJobs(response.data.jobs);
         setTotalJobs(response.data.total || 0);
@@ -144,10 +154,14 @@ export default function JobsPage() {
     e.preventDefault();
     setSubmitting(true);
     try {
+      const formData = {
+        ...form,
+        salary: form.salary?.min && form.salary?.max ? form.salary : null,
+      };
       if (editingJob) {
-        await api.put(`/jobs/${editingJob._id}`, form, token || undefined);
+        await api.put(ENDPOINTS.JOBS.UPDATE(editingJob._id), formData, token || undefined);
       } else {
-        await api.post('/jobs', form, token || undefined);
+        await api.post(ENDPOINTS.JOBS.CREATE, formData, token || undefined);
       }
       setShowModal(false);
       setForm(initialForm);
@@ -167,19 +181,19 @@ export default function JobsPage() {
       description: job.description,
       employmentType: job.employmentType,
       jobLevel: job.jobLevel,
-      requiredSkills: job.requiredSkills,
-      responsibilities: [],
-      experience: job.experience,
-      education: [],
-      certifications: [],
-      languages: [],
-      location: job.location,
-      salary: null,
-      benefits: [],
-      applicationProcess: { steps: ['Apply', 'Screening', 'Interview', 'Offer'] },
-      tags: [],
-      applicationDeadline: job.applicationDeadline || '',
-      expirationDate: job.expirationDate || '',
+      requiredSkills: job.requiredSkills || [],
+      responsibilities: job.responsibilities || [],
+      experience: job.experience || '',
+      education: job.education || [],
+      certifications: job.certifications || [],
+      languages: job.languages || [],
+      location: job.location || { address: '', city: '', country: '', remote: false },
+      salary: job.salary || { min: 0, max: 0, currency: 'USD' },
+      benefits: job.benefits || [],
+      applicationProcess: job.applicationProcess || { steps: ['Apply', 'Screening', 'Interview', 'Offer'] },
+      tags: job.tags || [],
+      applicationDeadline: job.applicationDeadline ? job.applicationDeadline.split('T')[0] : '',
+      expirationDate: job.expirationDate ? job.expirationDate.split('T')[0] : '',
       status: job.status,
     });
     setShowModal(true);
@@ -188,7 +202,7 @@ export default function JobsPage() {
   const handleDelete = async (id: string) => {
     showConfirmation('Are you sure you want to delete this job?', async () => {
       try {
-        await api.delete(`/jobs/${id}`, token || undefined);
+        await api.delete(ENDPOINTS.JOBS.DELETE(id), token || undefined);
         fetchJobs();
         showToast('Job deleted successfully', 'success');
       } catch (error) {
@@ -205,7 +219,7 @@ export default function JobsPage() {
     setLoadingBias(true);
     try {
       const response = await api.get<{ success: boolean; data: { biasAlerts: { type: string; severity: string; description: string; suggestion: string }[]; alertCount: number; hasHighSeverity: boolean } }>(
-        `/jobs/${job._id}/bias`,
+        ENDPOINTS.JOBS.BIAS(job._id),
         token || undefined
       );
       if (response.success) {
@@ -235,7 +249,7 @@ export default function JobsPage() {
     setLoadingStats(true);
     try {
       const response = await api.get<{ success: boolean; data: { jobId: string; title: string; statistics: { totalCandidates: number; averageScore: number; highestScore: number; lowestScore: number; shortlistedCount: number; rejectedCount: number; pendingCount: number; interviewCount: number; biasAlertCount: number } } }>(
-        `/jobs/${job._id}/stats`,
+        ENDPOINTS.JOBS.STATS(job._id),
         token || undefined
       );
       if (response.success) {
@@ -259,9 +273,71 @@ export default function JobsPage() {
     setForm({ ...form, requiredSkills: form.requiredSkills.filter(s => s !== skill) });
   };
 
-  const employmentTypes = ['full-time', 'part-time', 'contract', 'internship', 'freelance'];
-  const jobLevels = ['entry', 'mid', 'senior', 'lead', 'executive'];
-  const statuses = ['draft', 'published', 'closed', 'archived'];
+  const addResp = () => {
+    if (respInput.trim() && !form.responsibilities.includes(respInput.trim())) {
+      setForm({ ...form, responsibilities: [...form.responsibilities, respInput.trim()] });
+      setRespInput('');
+    }
+  };
+
+  const removeResp = (resp: string) => {
+    setForm({ ...form, responsibilities: form.responsibilities.filter(r => r !== resp) });
+  };
+
+  const addCert = () => {
+    if (certInput.trim() && !form.certifications.includes(certInput.trim())) {
+      setForm({ ...form, certifications: [...form.certifications, certInput.trim()] });
+      setCertInput('');
+    }
+  };
+
+  const removeCert = (cert: string) => {
+    setForm({ ...form, certifications: form.certifications.filter(c => c !== cert) });
+  };
+
+  const addLang = () => {
+    if (langInput.trim() && !form.languages.includes(langInput.trim())) {
+      setForm({ ...form, languages: [...form.languages, langInput.trim()] });
+      setLangInput('');
+    }
+  };
+
+  const removeLang = (lang: string) => {
+    setForm({ ...form, languages: form.languages.filter(l => l !== lang) });
+  };
+
+  const addBenefit = () => {
+    if (benefitInput.trim() && !form.benefits.includes(benefitInput.trim())) {
+      setForm({ ...form, benefits: [...form.benefits, benefitInput.trim()] });
+      setBenefInput('');
+    }
+  };
+
+  const removeBenefit = (benefit: string) => {
+    setForm({ ...form, benefits: form.benefits.filter(b => b !== benefit) });
+  };
+
+  const addTag = () => {
+    if (tagInput.trim() && !form.tags.includes(tagInput.trim())) {
+      setForm({ ...form, tags: [...form.tags, tagInput.trim()] });
+      setTagInput('');
+    }
+  };
+
+  const removeTag = (tag: string) => {
+    setForm({ ...form, tags: form.tags.filter(t => t !== tag) });
+  };
+
+  const addEdu = () => {
+    if (eduInput.degree.trim()) {
+      setForm({ ...form, education: [...form.education, { ...eduInput, degree: eduInput.degree.trim(), field: eduInput.field.trim() }] });
+      setEduInput({ degree: '', field: '', required: true });
+    }
+  };
+
+  const removeEdu = (index: number) => {
+    setForm({ ...form, education: form.education.filter((_, i) => i !== index) });
+  };
 
   if (loading) {
     return (
@@ -459,95 +535,222 @@ export default function JobsPage() {
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-4 sm:p-6 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white">
-              <h2 className="text-lg sm:text-xl font-bold text-slate-900">{editingJob ? 'Edit Job' : 'Post New Job'}</h2>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="bg-white rounded-xl w-full max-w-3xl max-h-[95vh] overflow-y-auto">
+            <div className="p-4 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
+              <h2 className="text-lg font-bold text-slate-900">{editingJob ? 'Edit Job' : 'Post New Job'}</h2>
               <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 text-2xl">×</button>
             </div>
-            <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Job Title *</label>
-                <input type="text" required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., Senior Software Engineer" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Description *</label>
-                <textarea required rows={4} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Job description..." />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <form onSubmit={handleSubmit} className="p-4 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Job Title <span className="text-red-500">*</span></label>
+                  <input type="text" required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., Senior Software Engineer" />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Description <span className="text-red-500">*</span></label>
+                  <textarea required rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Job description..." />
+                </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Employment Type</label>
-                  <select value={form.employmentType} onChange={(e) => setForm({ ...form, employmentType: e.target.value })} className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Employment Type</label>
+                  <select value={form.employmentType} onChange={(e) => setForm({ ...form, employmentType: e.target.value })} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                     {employmentTypes.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Job Level</label>
-                  <select value={form.jobLevel} onChange={(e) => setForm({ ...form, jobLevel: e.target.value })} className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Job Level</label>
+                  <select value={form.jobLevel} onChange={(e) => setForm({ ...form, jobLevel: e.target.value })} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                     {jobLevels.map(l => <option key={l} value={l}>{l.charAt(0).toUpperCase() + l.slice(1)}</option>)}
                   </select>
                 </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Experience</label>
+                  <input type="text" value={form.experience} onChange={(e) => setForm({ ...form, experience: e.target.value })} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., 5+ years" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Status</label>
+                  <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    {statuses.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                  </select>
+                </div>
               </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Required Skills</label>
+                  <div className="flex flex-wrap gap-1 mb-2 min-h-[32px]">
+                    {form.requiredSkills.map(skill => (
+                      <span key={skill} className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs flex items-center gap-1">
+                        {skill}
+                        <button type="button" onClick={() => removeSkill(skill)} className="text-blue-500 hover:text-blue-700">×</button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex gap-1">
+                    <input type="text" value={skillInput} onChange={(e) => setSkillInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addSkill())} className="flex-1 px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Add skill" />
+                    <button type="button" onClick={addSkill} className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 text-xs">Add</button>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Responsibilities</label>
+                  <div className="flex flex-wrap gap-1 mb-2 min-h-[32px]">
+                    {form.responsibilities.map(resp => (
+                      <span key={resp} className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs flex items-center gap-1">
+                        {resp.substring(0, 20)}{resp.length > 20 ? '...' : ''}
+                        <button type="button" onClick={() => removeResp(resp)} className="text-purple-500 hover:text-purple-700">×</button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex gap-1">
+                    <input type="text" value={respInput} onChange={(e) => setRespInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addResp())} className="flex-1 px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Add responsibility" />
+                    <button type="button" onClick={addResp} className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 text-xs">Add</button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Education</label>
+                  <div className="flex flex-wrap gap-1 mb-2 min-h-[32px]">
+                    {form.education.map((edu, i) => (
+                      <span key={i} className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-xs flex items-center gap-1">
+                        {edu.degree} {edu.field && `(${edu.field})`}
+                        <button type="button" onClick={() => removeEdu(i)} className="text-emerald-500 hover:text-emerald-700">×</button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex gap-1">
+                    <input type="text" value={eduInput.degree} onChange={(e) => setEduInput({ ...eduInput, degree: e.target.value })} className="flex-1 px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Degree" />
+                    <input type="text" value={eduInput.field} onChange={(e) => setEduInput({ ...eduInput, field: e.target.value })} className="flex-1 px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Field" />
+                    <button type="button" onClick={addEdu} className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 text-xs">Add</button>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Certifications</label>
+                  <div className="flex flex-wrap gap-1 mb-2 min-h-[32px]">
+                    {form.certifications.map(cert => (
+                      <span key={cert} className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs flex items-center gap-1">
+                        {cert}
+                        <button type="button" onClick={() => removeCert(cert)} className="text-orange-500 hover:text-orange-700">×</button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex gap-1">
+                    <input type="text" value={certInput} onChange={(e) => setCertInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addCert())} className="flex-1 px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Add certification" />
+                    <button type="button" onClick={addCert} className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 text-xs">Add</button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Languages</label>
+                  <div className="flex flex-wrap gap-1 mb-2 min-h-[32px]">
+                    {form.languages.map(lang => (
+                      <span key={lang} className="px-2 py-1 bg-cyan-100 text-cyan-700 rounded text-xs flex items-center gap-1">
+                        {lang}
+                        <button type="button" onClick={() => removeLang(lang)} className="text-cyan-500 hover:text-cyan-700">×</button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex gap-1">
+                    <input type="text" value={langInput} onChange={(e) => setLangInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addLang())} className="flex-1 px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Add language" />
+                    <button type="button" onClick={addLang} className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 text-xs">Add</button>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Benefits</label>
+                  <div className="flex flex-wrap gap-1 mb-2 min-h-[32px]">
+                    {form.benefits.map(benefit => (
+                      <span key={benefit} className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs flex items-center gap-1">
+                        {benefit}
+                        <button type="button" onClick={() => removeBenefit(benefit)} className="text-green-500 hover:text-green-700">×</button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex gap-1">
+                    <input type="text" value={benefitInput} onChange={(e) => setBenefInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addBenefit())} className="flex-1 px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Add benefit" />
+                    <button type="button" onClick={addBenefit} className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 text-xs">Add</button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="col-span-2 md:col-span-1">
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Address</label>
+                  <input type="text" value={form.location.address} onChange={(e) => setForm({ ...form, location: { ...form.location, address: e.target.value } })} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="KG 11 Ave" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">City</label>
+                  <input type="text" value={form.location.city} onChange={(e) => setForm({ ...form, location: { ...form.location, city: e.target.value } })} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Country</label>
+                  <input type="text" value={form.location.country} onChange={(e) => setForm({ ...form, location: { ...form.location, country: e.target.value } })} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div className="flex items-center">
+                  <label className="flex items-center gap-2 mt-6 cursor-pointer">
+                    <input type="checkbox" checked={form.location.remote} onChange={(e) => setForm({ ...form, location: { ...form.location, remote: e.target.checked } })} className="w-4 h-4 rounded" />
+                    <span className="text-sm text-slate-700">Remote</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Salary Min</label>
+                  <input type="number" value={form.salary?.min || 0} onChange={(e) => setForm({ ...form, salary: { ...form.salary!, min: parseInt(e.target.value) || 0 } })} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Salary Max</label>
+                  <input type="number" value={form.salary?.max || 0} onChange={(e) => setForm({ ...form, salary: { ...form.salary!, max: parseInt(e.target.value) || 0 } })} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Currency</label>
+                  <select value={form.salary?.currency || 'USD'} onChange={(e) => setForm({ ...form, salary: { ...form.salary!, currency: e.target.value } })} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    {currencies.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div className="flex items-center">
+                  <label className="flex items-center gap-2 mt-6 cursor-pointer">
+                    <input type="checkbox" checked={!form.salary?.min && !form.salary?.max} onChange={(e) => setForm({ ...form, salary: e.target.checked ? { min: 0, max: 0, currency: form.salary?.currency || 'USD' } : { min: 0, max: 0, currency: form.salary?.currency || 'USD' } })} className="w-4 h-4 rounded" />
+                    <span className="text-sm text-slate-700">Hide Salary</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Application Deadline</label>
+                  <input type="date" value={form.applicationDeadline} onChange={(e) => setForm({ ...form, applicationDeadline: e.target.value })} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Expiration Date</label>
+                  <input type="date" value={form.expirationDate} onChange={(e) => setForm({ ...form, expirationDate: e.target.value })} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Required Skills</label>
-                <div className="flex gap-2 flex-wrap mb-2">
-                  {form.requiredSkills.map(skill => (
-                    <span key={skill} className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-sm flex items-center gap-1">
-                      {skill}
-                      <button type="button" onClick={() => removeSkill(skill)} className="text-blue-500 hover:text-blue-700">×</button>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Tags</label>
+                <div className="flex flex-wrap gap-1 mb-2 min-h-[32px]">
+                  {form.tags.map(tag => (
+                    <span key={tag} className="px-2 py-1 bg-slate-200 text-slate-700 rounded text-xs flex items-center gap-1">
+                      #{tag}
+                      <button type="button" onClick={() => removeTag(tag)} className="text-slate-500 hover:text-slate-700">×</button>
                     </span>
                   ))}
                 </div>
-                <div className="flex gap-2">
-                  <input type="text" value={skillInput} onChange={(e) => setSkillInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addSkill())} className="flex-1 px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Add skill and press Enter" />
-                  <button type="button" onClick={addSkill} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200">Add</button>
+                <div className="flex gap-1">
+                  <input type="text" value={tagInput} onChange={(e) => setTagInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())} className="flex-1 px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Add tag" />
+                  <button type="button" onClick={addTag} className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 text-xs">Add</button>
                 </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Experience</label>
-                <input type="text" value={form.experience} onChange={(e) => setForm({ ...form, experience: e.target.value })} className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., 5+ years" />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="sm:col-span-2 lg:col-span-2">
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Address</label>
-                  <input type="text" value={form.location.address} onChange={(e) => setForm({ ...form, location: { ...form.location, address: e.target.value } })} className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="KG 11 Ave" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">City</label>
-                  <input type="text" value={form.location.city} onChange={(e) => setForm({ ...form, location: { ...form.location, city: e.target.value } })} className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Country</label>
-                  <input type="text" value={form.location.country} onChange={(e) => setForm({ ...form, location: { ...form.location, country: e.target.value } })} className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-              </div>
-              <div className="flex items-center">
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" checked={form.location.remote} onChange={(e) => setForm({ ...form, location: { ...form.location, remote: e.target.checked } })} className="w-4 h-4" />
-                  <span className="text-sm text-slate-700">Remote Position</span>
-                </label>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Application Deadline</label>
-                  <input type="date" value={form.applicationDeadline} onChange={(e) => setForm({ ...form, applicationDeadline: e.target.value })} className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Expiration Date</label>
-                  <input type="date" value={form.expirationDate} onChange={(e) => setForm({ ...form, expirationDate: e.target.value })} className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
-                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  {statuses.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-                </select>
-              </div>
-              <div className="flex gap-3 sm:gap-4 pt-4">
-                <button type="submit" disabled={submitting} className="flex-1 py-2 sm:py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm sm:text-base">
+
+              <div className="flex gap-3 pt-2">
+                <button type="submit" disabled={submitting} className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium">
                   {submitting ? 'Saving...' : (editingJob ? 'Update Job' : 'Post Job')}
                 </button>
-                <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-2 sm:py-2.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 text-sm sm:text-base">
+                <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 text-sm font-medium">
                   Cancel
                 </button>
               </div>

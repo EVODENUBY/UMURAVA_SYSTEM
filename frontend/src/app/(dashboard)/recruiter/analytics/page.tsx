@@ -74,7 +74,7 @@ export default function AnalyticsPage() {
     try {
       const params = selectedJob ? `?jobId=${selectedJob}` : '';
       const response = await api.get<{ success: boolean; data: Analytics }>(
-        `/analytics${params}`,
+        `/api/analytics${params}`,
         token || undefined
       );
       if (response.success) {
@@ -277,7 +277,7 @@ export default function AnalyticsPage() {
               </Link>
             ))}
             {(!analytics?.jobs || analytics.jobs.length === 0) && (
-              <p className="text-slate-500 text-center py-4">No jobs yet</p>
+              <p className="text-slate-500 text-center py-4">No jobs available</p>
             )}
           </div>
         </div>

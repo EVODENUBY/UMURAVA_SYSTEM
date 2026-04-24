@@ -18,7 +18,7 @@ export interface CandidateEvaluation {
 }
 
 export interface BiasAlert {
-  type: 'gender' | 'experience' | 'education' | 'exclusionary' | 'age' | 'other';
+  type: 'gender' | 'experience' | 'experience_requirement' | 'education' | 'education_requirement' | 'exclusionary' | 'age' | 'assessment_data' | 'data_limitation' | 'data_quality_or_generic_resume' | 'data_completeness' | 'geographic_location' | 'resume_detail' | 'language' | 'other';
   severity: 'low' | 'medium' | 'high';
   description: string;
   suggestion: string;
@@ -126,6 +126,8 @@ Analyze for:
 - Education requirements that over-emphasize degrees
 - Age-related language
 - Geographic or cultural bias
+
+IMPORTANT: For biasAlerts[].type, use ONLY these values: gender, experience, experience_requirement, education, education_requirement, exclusionary, age, assessment_data, data_limitation, data_quality_or_generic_resume, data_completeness, geographic_location, resume_detail, language, other
 
 ## OUTPUT FORMAT
 Return ONLY valid JSON:
@@ -501,6 +503,9 @@ Education: ${job.education.map(edu => `${edu.degree}${edu.field ? ` in ${edu.fie
 4. Calculate INCLUSIVITY SCORE (0-100)
 5. Generate OPTIMIZED version
 
+## VALID BIAS ALERT TYPES
+Use ONLY these values for the "type" field: gender, experience, experience_requirement, education, education_requirement, exclusionary, age, assessment_data, data_limitation, data_quality_or_generic_resume, data_completeness, geographic_location, resume_detail, language, other
+
 ## OUTPUT FORMAT
 {
   "biasAlerts": [
@@ -569,23 +574,80 @@ Resume: ${applicant.resumeText ? applicant.resumeText.substring(0, 1000) + (appl
    * Parse AI response
    */
   static parseAIResponse(responseText: string): ScreeningOutput {
-    try {
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      const jsonString = jsonMatch ? jsonMatch[0] : responseText;
-      const parsed = JSON.parse(jsonString);
-      
-      if (!parsed.candidates || !Array.isArray(parsed.candidates)) {
-        throw new Error('Invalid response: candidates array missing');
-      }
-      
-      return {
-        candidates: parsed.candidates,
-        biasAlerts: parsed.biasAlerts || [],
-        summary: parsed.summary || 'No summary provided'
-      };
-    } catch (error) {
-      throw new Error(`Failed to parse AI response: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    let jsonString = responseText;
+
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      jsonString = jsonMatch[0];
     }
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(jsonString);
+    } catch {
+      const fixed = PromptBuilder.fixJSON(jsonString);
+      parsed = JSON.parse(fixed);
+    }
+
+    if (!parsed.candidates || !Array.isArray(parsed.candidates)) {
+      throw new Error('Invalid response: candidates array missing');
+    }
+
+    return {
+      candidates: parsed.candidates,
+      biasAlerts: parsed.biasAlerts || [],
+      summary: parsed.summary || 'No summary provided'
+    };
+  }
+
+  private static fixJSON(jsonString: string): string {
+    let fixed = jsonString;
+
+    fixed = fixed.replace(/\}\s*\{/g, '},{');
+    fixed = fixed.replace(/\]\s*\]/g, '],]');
+
+    fixed = fixed.replace(/,\s*\]/g, ']');
+    fixed = fixed.replace(/,\s*\}/g, '}');
+
+    const stack: string[] = [];
+    let result = '';
+    let inString = false;
+    let escape = false;
+
+    for (let i = 0; i < fixed.length; i++) {
+      const char = fixed[i];
+      if (escape) {
+        result += char;
+        escape = false;
+        continue;
+      }
+      if (char === '\\' && inString) {
+        result += char;
+        escape = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = !inString;
+        result += char;
+        continue;
+      }
+      if (inString) {
+        result += char;
+        continue;
+      }
+      if (char === '[' || char === '{') {
+        stack.push(char);
+      } else if (char === ']' && stack[stack.length - 1] === '[') {
+        stack.pop();
+      } else if (char === '}' && stack[stack.length - 1] === '{') {
+        stack.pop();
+      } else if (char === ',' && stack.length === 0) {
+        continue;
+      }
+      result += char;
+    }
+
+    return result;
   }
 }
 

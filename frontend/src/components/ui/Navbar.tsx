@@ -20,7 +20,8 @@ import {
   FileText,
   CheckCircle,
   CircleDot,
-  Search
+  Search,
+  Users
 } from 'lucide-react';
 
 interface Notification {
@@ -60,7 +61,7 @@ export default function Navbar({ onToggleSidebar, sidebarCollapsed, onMobileMenu
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/api$/, '') || 'https://recruiter-ai-platform.onrender.com';
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/api$/, '') || 'http://localhost:5000';
 
   useEffect(() => {
     const fetchProfileAvatar = async () => {
@@ -124,7 +125,15 @@ export default function Navbar({ onToggleSidebar, sidebarCollapsed, onMobileMenu
     { label: 'Settings', icon: Settings, href: '/recruiter/settings' },
   ];
 
-  const menuItems = user?.role === 'recruiter' || user?.role === 'admin' ? recruiterMenuItems : defaultMenuItems;
+  const adminMenuItems = [
+    { label: 'Dashboard', icon: UserCircle, href: '/admin' },
+    { label: 'Users', icon: Users, href: '/admin/users' },
+    { label: 'Jobs', icon: Briefcase, href: '/admin/jobs' },
+    { label: 'Settings', icon: Settings, href: '/admin/settings' },
+  ];
+
+  const menuItems = user?.role === 'admin' ? adminMenuItems : 
+                      user?.role === 'recruiter' ? recruiterMenuItems : defaultMenuItems;
 
   const toggleSidebars = () => {
     if (onToggleSidebar) {

@@ -33,9 +33,6 @@ class JobController {
       description,
       requiredSkills,
       experience,
-      education,
-      location,
-      salary,
       status,
       applicationDeadline,
       expirationDate
@@ -87,7 +84,7 @@ class JobController {
     const skip = (page - 1) * limit;
 
     // Only show published jobs to public (exclude analytics)
-    let query: any = { status: 'published' };
+    const query: Record<string, unknown> = { status: 'published' };
     if (search) {
       query.$and = [
         { status: 'published' },
@@ -135,7 +132,7 @@ class JobController {
     const status = req.query.status as string;
     const skip = (page - 1) * limit;
 
-    let query: any = {};
+    const query: Record<string, unknown> = {};
     if (status) query.status = status;
     if (search) {
       query.$or = [
@@ -146,17 +143,26 @@ class JobController {
 
     const [jobs, total] = await Promise.all([
       Job.find(query)
+        .populate('createdBy', 'firstName lastName email')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .exec(),
+        .lean(),
       Job.countDocuments(query)
     ]);
+
+    // Add fullName to populated createdBy
+    const jobsWithFullName = jobs.map((job: any) => {
+      if (job.createdBy && typeof job.createdBy === 'object') {
+        job.createdBy.fullName = `${job.createdBy.firstName || ''} ${job.createdBy.lastName || ''}`.trim();
+      }
+      return job;
+    });
 
     res.status(200).json({
       success: true,
       data: {
-        jobs,
+        jobs: jobsWithFullName,
         pagination: {
           page,
           limit,
@@ -190,14 +196,14 @@ class JobController {
    */
   updateJob = asyncHandler(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { id } = req.params;
-    const { status, expirationDate, postedDate: bodyPostedDate, ...updateData } = req.body;
+    const { status, ...updateData } = req.body;
 
     const existingJob = await Job.findById(id);
     if (!existingJob) {
       return next(createError('Job not found', 404));
     }
 
-    const updateFields: any = { ...updateData };
+    const updateFields: Record<string, unknown> = { ...updateData };
     
     if (status === 'published' && existingJob.status !== 'published') {
       updateFields.postedDate = new Date();
