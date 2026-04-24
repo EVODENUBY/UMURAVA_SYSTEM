@@ -35,6 +35,9 @@ export default function ShortlistPage() {
   const [loading, setLoading] = useState(true);
   const [selectedCandidate, setSelectedCandidate] = useState<ShortlistedCandidate | null>(null);
   const [compareMode, setCompareMode] = useState<string[]>([]);
+  const [comparisonData, setComparisonData] = useState<any>(null);
+  const [showComparisonModal, setShowComparisonModal] = useState(false);
+  const [loadingComparison, setLoadingComparison] = useState(false);
 
   useEffect(() => {
     fetchJobs();
@@ -99,6 +102,31 @@ export default function ShortlistPage() {
       setCompareMode(compareMode.filter(c => c !== id));
     } else if (compareMode.length < 4) {
       setCompareMode([...compareMode, id]);
+    }
+  };
+
+  const performComparison = async () => {
+    if (compareMode.length < 2) {
+      alert('Please select at least 2 candidates to compare');
+      return;
+    }
+
+    setLoadingComparison(true);
+    try {
+      const response = await api.post<{ success: boolean; data: any }>(
+        '/shortlist/compare',
+        { applicantIds: compareMode },
+        token || undefined
+      );
+      if (response.success) {
+        setComparisonData(response.data);
+        setShowComparisonModal(true);
+      }
+    } catch (error) {
+      console.error('Failed to compare candidates:', error);
+      alert('Failed to compare candidates');
+    } finally {
+      setLoadingComparison(false);
     }
   };
 
@@ -231,10 +259,11 @@ export default function ShortlistPage() {
             })}
           </div>
           <button
-            onClick={() => alert('Compare functionality coming soon!')}
-            className="w-full py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-xs sm:text-sm"
+            onClick={performComparison}
+            disabled={loadingComparison}
+            className="w-full py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-xs sm:text-sm"
           >
-            Compare Selected
+            {loadingComparison ? 'Comparing...' : 'Compare Selected'}
           </button>
         </div>
       )}
@@ -306,6 +335,66 @@ export default function ShortlistPage() {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showComparisonModal && comparisonData && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="p-4 sm:p-6 border-b border-slate-100 flex justify-between items-center">
+              <div>
+                <h2 className="text-lg sm:text-xl font-bold text-slate-900">Candidate Comparison</h2>
+                <p className="text-sm text-slate-500">Comparing {compareMode.length} shortlisted candidates</p>
+              </div>
+              <button onClick={() => { setShowComparisonModal(false); setComparisonData(null); }} className="text-slate-400 hover:text-slate-600 text-2xl">×</button>
+            </div>
+            <div className="p-4 sm:p-6 space-y-6">
+              {comparisonData.comparison?.map((item: any, index: number) => (
+                <div key={item.applicantId} className="border border-slate-200 rounded-lg p-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    <span className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-white text-xs ${
+                      index === 0 ? 'bg-yellow-500' : index === 1 ? 'bg-slate-500' : 'bg-slate-400'
+                    }`}>
+                      {index + 1}
+                    </span>
+                    <h3 className="font-semibold text-slate-900">{item.applicantName}</h3>
+                    <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">{item.score}% match</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <h4 className="font-medium text-slate-700 mb-2">Strengths</h4>
+                      <div className="space-y-1">
+                        {item.strengths?.map((strength: string, i: number) => (
+                          <div key={i} className="flex items-start gap-2">
+                            <span className="text-green-500 mt-0.5">•</span>
+                            <span className="text-sm text-slate-600">{strength}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-slate-700 mb-2">Comparison Notes</h4>
+                      <div className="space-y-1">
+                        {item.comparisonNotes?.map((note: string, i: number) => (
+                          <div key={i} className="flex items-start gap-2">
+                            <span className="text-blue-500 mt-0.5">•</span>
+                            <span className="text-sm text-slate-600">{note}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {comparisonData.overallRecommendation && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h3 className="font-semibold text-blue-900 mb-2">Overall Recommendation</h3>
+                  <p className="text-blue-800">{comparisonData.overallRecommendation}</p>
                 </div>
               )}
             </div>
