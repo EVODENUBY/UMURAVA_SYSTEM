@@ -30,7 +30,7 @@ export default function AnalyticsPage() {
     try {
       const params = selectedJob ? `?jobId=${selectedJob}` : '';
       const response = await api.get<{ success: boolean; data: Analytics }>(
-        `/analytics${params}`,
+        `/api/analytics${params}`,
         token || undefined
       );
       if (response.success) {
