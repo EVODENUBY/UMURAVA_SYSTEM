@@ -18,8 +18,36 @@ export interface EvaluationResult {
   };
 }
 
+const VALID_BIAS_ALERT_TYPES = [
+  'gender',
+  'experience',
+  'experience_requirement',
+  'education',
+  'education_requirement',
+  'exclusionary',
+  'age',
+  'assessment_data',
+  'data_limitation',
+  'data_quality_or_generic_resume',
+  'data_completeness',
+  'geographic_location',
+  'resume_detail',
+  'language',
+  'other'
+] as const;
+
+type ValidBiasAlertType = typeof VALID_BIAS_ALERT_TYPES[number];
+
+function normalizeBiasAlertType(type: string): ValidBiasAlertType {
+  const normalized = type.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+  if (VALID_BIAS_ALERT_TYPES.includes(normalized as ValidBiasAlertType)) {
+    return normalized as ValidBiasAlertType;
+  }
+  return 'other';
+}
+
 export interface BiasDetectionResult {
-  type: 'gender' | 'experience' | 'education' | 'exclusionary' | 'age' | 'other';
+  type: ValidBiasAlertType;
   severity: 'low' | 'medium' | 'high';
   description: string;
   suggestion: string;
@@ -119,7 +147,7 @@ export class AIService {
       }));
 
       const biasAlerts: BiasDetectionResult[] = parsedOutput.biasAlerts.map(alert => ({
-        type: alert.type,
+        type: normalizeBiasAlertType(alert.type),
         severity: alert.severity,
         description: alert.description,
         suggestion: alert.suggestion
@@ -160,7 +188,7 @@ export class AIService {
       const parsed = JSON.parse(jsonString);
 
       const biasAlerts: BiasDetectionResult[] = (parsed.biasAlerts || []).map((alert: BiasDetectionResult) => ({
-        type: alert.type,
+        type: normalizeBiasAlertType(alert.type),
         severity: alert.severity,
         description: alert.description,
         suggestion: alert.suggestion,
