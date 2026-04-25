@@ -30,15 +30,56 @@ interface Analytics {
   scoreDistribution?: { range: string; count: number }[];
 }
 
-const COLORS = ['#3B82F6', '#8B5CF6', '#10B981', '#F59E0B', '#EF4444', '#06B6D4'];
+interface JobAnalytics {
+  job: {
+    _id: string;
+    title: string;
+    status: string;
+  };
+  applicants: {
+    total: number;
+    internal: number;
+    external: number;
+  };
+  screeningResults: Array<{
+    _id: string;
+    score: number;
+    ranking?: number;
+    status: string;
+    strengths: string[];
+    gaps: string[];
+    reasoning: string;
+    applicantId: {
+      _id: string;
+      name: string;
+      email: string;
+    };
+  }>;
+  rankedCandidates: Array<{
+    _id: string;
+    score: number;
+    ranking: number;
+    status: string;
+    applicantId: {
+      _id: string;
+      name: string;
+      email: string;
+    };
+  }>;
+  scoreDistribution: Array<{
+    _id: string;
+    count: number;
+  }>;
+}
 
 export default function AnalyticsPage() {
   const { token } = useAuth();
   const { showToast } = useToast();
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [selectedJob, setSelectedJob] = useState<string>('');
+  const [jobAnalytics, setJobAnalytics] = useState<JobAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
-  const requestId = useRef(0);
+  const [loadingJob, setLoadingJob] = useState(false);
 
   useEffect(() => {
     const currentRequestId = ++requestId.current;
@@ -69,20 +110,76 @@ export default function AnalyticsPage() {
     loadAnalytics();
   }, [selectedJob, token]);
 
-  const handleJobChange = (jobId: string) => {
-    setSelectedJob(jobId);
+  useEffect(() => {
+    fetchAnalytics();
+  }, [fetchAnalytics]);
+
+  const fetchJobAnalytics = async (jobId: string) => {
+    setLoadingJob(true);
+    try {
+      const response = await api.get<{ success: boolean; data: JobAnalytics }>(
+        `/analytics/jobs/${jobId}`,
+        token || undefined
+      );
+      if (response.success) {
+        setJobAnalytics(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch job analytics:', error);
+    } finally {
+      setLoadingJob(false);
+    }
   };
 
-  const totalApplicants = selectedJob 
-    ? (analytics?.jobsWithApplicants?.find((j: any) => String(j._id) === selectedJob)?.totalApplicants || 0)
-    : (analytics?.overview.totalApplicants || 0);
-  const totalInternal = selectedJob
-    ? (analytics?.jobsWithApplicants?.find((j: any) => String(j._id) === selectedJob)?.internalCount || 0)
-    : (analytics?.overview.totalInternalApplicants || 0);
-  const totalExternal = selectedJob
-    ? (analytics?.jobsWithApplicants?.find((j: any) => String(j._id) === selectedJob)?.externalCount || 0)
-    : (analytics?.overview.totalExternalApplicants || 0);
-  const totalScreened = analytics?.overview.totalScreened || 0;
+  useEffect(() => {
+    if (selectedJob) {
+      fetchJobAnalytics(selectedJob);
+    } else {
+      setJobAnalytics(null);
+    }
+  }, [selectedJob, token]);
+
+  const statCards = [
+    {
+      label: 'Total Jobs',
+      value: analytics?.overview.totalJobs || 0,
+      icon: <FaBriefcase />,
+      bgColor: 'bg-blue-500',
+      href: '/recruiter/jobs',
+    },
+    {
+      label: 'Total Applicants',
+      value: analytics?.overview.totalApplicants || 0,
+      icon: <FaUsers />,
+      bgColor: 'bg-purple-500',
+      href: '/recruiter/applicants',
+    },
+    {
+      label: 'Internal',
+      value: analytics?.overview.totalInternalApplicants || 0,
+      icon: <FaUsers />,
+      bgColor: 'bg-green-500',
+    },
+    {
+      label: 'External',
+      value: analytics?.overview.totalExternalApplicants || 0,
+      icon: <FaFileAlt />,
+      bgColor: 'bg-orange-500',
+    },
+    {
+      label: 'Screened',
+      value: analytics?.overview.totalScreened || 0,
+      icon: <FaChartLine />,
+      bgColor: 'bg-cyan-500',
+      href: '/recruiter/screening',
+    },
+    {
+      label: 'Avg Score',
+      value: `${analytics?.averageScore || 0}%`,
+      icon: <FaChartLine />,
+      bgColor: 'bg-indigo-500',
+    },
+  ];
 
   const applicantSourceData = [
     { name: 'Internal', value: totalInternal, fill: '#10B981' },
@@ -399,6 +496,123 @@ export default function AnalyticsPage() {
             <p className="text-[10px] text-slate-500 flex items-center justify-center gap-1"><FaTimesCircle className="w-3 h-3 text-red-500" /> Rejected</p>
           </div>
         </div>
+
+        {selectedJob && jobAnalytics && (
+          <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-slate-100 mt-4 sm:mt-6">
+            <h2 className="text-base sm:text-lg font-semibold text-slate-900 mb-4">Job Analytics: {jobAnalytics.job.title}</h2>
+
+            {loadingJob ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="h-16 bg-slate-100 rounded animate-pulse" />
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Applicant Overview */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+                  <div className="text-center p-3 sm:p-4 bg-blue-50 rounded-xl">
+                    <p className="text-xl sm:text-2xl font-bold text-blue-600">{jobAnalytics.applicants.total}</p>
+                    <p className="text-xs sm:text-sm text-slate-500">Total Applicants</p>
+                  </div>
+                  <div className="text-center p-3 sm:p-4 bg-green-50 rounded-xl">
+                    <p className="text-xl sm:text-2xl font-bold text-green-600">{jobAnalytics.applicants.internal}</p>
+                    <p className="text-xs sm:text-sm text-slate-500">Internal</p>
+                  </div>
+                  <div className="text-center p-3 sm:p-4 bg-purple-50 rounded-xl">
+                    <p className="text-xl sm:text-2xl font-bold text-purple-600">{jobAnalytics.applicants.external}</p>
+                    <p className="text-xs sm:text-sm text-slate-500">External</p>
+                  </div>
+                </div>
+
+                {/* Score Distribution */}
+                {jobAnalytics.scoreDistribution && jobAnalytics.scoreDistribution.length > 0 && (
+                  <div>
+                    <h3 className="text-sm sm:text-base font-semibold text-slate-900 mb-3">Score Distribution</h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {jobAnalytics.scoreDistribution.map((dist, index) => (
+                        <div key={index} className="text-center p-3 bg-slate-50 rounded-lg">
+                          <p className="text-lg font-bold text-slate-900">{dist.count}</p>
+                          <p className="text-xs text-slate-500">{dist._id}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Top Ranked Candidates */}
+                {jobAnalytics.rankedCandidates && jobAnalytics.rankedCandidates.length > 0 && (
+                  <div>
+                    <h3 className="text-sm sm:text-base font-semibold text-slate-900 mb-3">Top Ranked Candidates</h3>
+                    <div className="space-y-2">
+                      {jobAnalytics.rankedCandidates.slice(0, 5).map((candidate, index) => (
+                        <div key={candidate._id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <span className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-white text-xs ${
+                              index === 0 ? 'bg-yellow-500' : index === 1 ? 'bg-slate-500' : 'bg-slate-400'
+                            }`}>
+                              #{candidate.ranking}
+                            </span>
+                            <div>
+                              <p className="font-medium text-slate-900 text-sm">{candidate.applicantId.name}</p>
+                              <p className="text-xs text-slate-500">{candidate.applicantId.email}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-bold text-blue-600">{candidate.score}%</p>
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium capitalize ${
+                              candidate.status === 'shortlisted' ? 'bg-green-100 text-green-700' :
+                              candidate.status === 'interview' ? 'bg-purple-100 text-purple-700' :
+                              'bg-yellow-100 text-yellow-700'
+                            }`}>
+                              {candidate.status}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Recent Screening Results */}
+                {jobAnalytics.screeningResults && jobAnalytics.screeningResults.length > 0 && (
+                  <div>
+                    <h3 className="text-sm sm:text-base font-semibold text-slate-900 mb-3">Recent Screening Results</h3>
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {jobAnalytics.screeningResults.slice(0, 10).map((result, index) => (
+                        <div key={result._id} className="p-3 bg-slate-50 rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <div>
+                              <p className="font-medium text-slate-900 text-sm">{result.applicantId.name}</p>
+                              <p className="text-xs text-slate-500">{result.applicantId.email}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-bold text-blue-600">{result.score}%</p>
+                              <span className={`px-2 py-0.5 rounded text-xs font-medium capitalize ${
+                                result.status === 'shortlisted' ? 'bg-green-100 text-green-700' :
+                                result.status === 'interview' ? 'bg-purple-100 text-purple-700' :
+                                'bg-yellow-100 text-yellow-700'
+                              }`}>
+                                {result.status}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {result.strengths.slice(0, 3).map((strength, i) => (
+                              <span key={i} className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">{strength}</span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -15,7 +15,7 @@ interface Job {
 
 interface ScreeningResult {
   _id: string;
-  applicantId: { _id: string; name: string; email: string; skills: string[]; experience: { years: number }; education: unknown[] };
+  applicantId: { _id: string; name: string; email: string; skills: string[]; experience: { years: number }; education: unknown[]; skillDetails?: Array<{ name: string; level: string; yearsOfExperience: number }>; languages?: Array<{ name: string; proficiency: string }> } | null;
   score: number;
   ranking: number;
   status: string;
@@ -28,6 +28,12 @@ interface ScreeningResult {
     educationMatch: number;
     overallMatch: number;
   };
+  biasAlerts?: Array<{
+    type: string;
+    severity: string;
+    description: string;
+    suggestion: string;
+  }>;
 }
 
 interface ScreeningStats {
@@ -67,22 +73,18 @@ export default function ScreeningPage() {
   const [running, setRunning] = useState(false);
   const [screeningMode, setScreeningMode] = useState<'standard' | 'best' | 'advanced'>('standard');
   const [selectedResult, setSelectedResult] = useState<ScreeningResult | null>(null);
+  const [selectedForComparison, setSelectedForComparison] = useState<string[]>([]);
+  const [showComparison, setShowComparison] = useState(false);
+  const [comparisonResult, setComparisonResult] = useState<any>(null);
+
+  const [interviewQuestions, setInterviewQuestions] = useState<string[]>([]);
+  const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
   const [threshold, setThreshold] = useState<number>(50);
   const [shortlistThreshold, setShortlistThreshold] = useState<number>(75);
   const ITEMS_PER_PAGE = 10;
-
-  useEffect(() => {
-    fetchJobs();
-  }, [token]);
-
-  useEffect(() => {
-    if (selectedJob) {
-      fetchResults();
-    }
-  }, [selectedJob, currentPage]);
 
   const fetchJobs = async () => {
     try {
@@ -105,7 +107,7 @@ export default function ScreeningPage() {
       const params = new URLSearchParams();
       params.append('page', currentPage.toString());
       params.append('limit', ITEMS_PER_PAGE.toString());
-      
+
       const resultsResponse = await api.get<{ success: boolean; data: { results: ScreeningResult[]; total: number; pages: number } }>(
         `${ENDPOINTS.SCREENING.RESULTS(selectedJob)}?${params.toString()}`,
         token || undefined
@@ -124,7 +126,8 @@ export default function ScreeningPage() {
         setStats(statsResponse.data.statistics);
       }
     } catch (error) {
-      console.error('Failed to fetch results:', error);
+      console.error('Failed to fetch screening data:', error);
+      showToast('Failed to load screening results', 'error');
     } finally {
       setLoading(false);
     }
@@ -185,73 +188,125 @@ const runScreening = async () => {
     }
   };
 
+  useEffect(() => {
+    fetchJobs();
+  }, [token]);
+
+  useEffect(() => {
+    if (selectedJob) {
+      fetchResults();
+    }
+  }, [selectedJob, currentPage]);
+
+  const updateCandidateStatus = async (applicantId: string, newStatus: string) => {
+    try {
+      await api.put(`/screening/status/${selectedJob}/${applicantId}`, { status: newStatus }, token || undefined);
+      fetchResults();
+      showToast(`Candidate status updated to ${newStatus}`, 'success');
+    } catch (error) {
+      console.error('Failed to update status:', error);
+      showToast('Failed to update candidate status', 'error');
+    }
+  };
+
+  const rerunScreening = async () => {
+    if (!selectedJob) return;
+    setRunning(true);
+    try {
+      const response = await api.post<{ success: boolean }>(`/screening/rerun/${selectedJob}`, {}, token || undefined);
+      if (response.success) {
+        fetchResults();
+        showToast('Screening re-run completed', 'success');
+      }
+    } catch (error) {
+      console.error('Failed to re-run screening:', error);
+      showToast('Failed to re-run screening', 'error');
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const compareCandidates = async () => {
+    if (selectedForComparison.length < 2) {
+      showToast('Please select at least 2 candidates to compare', 'warning');
+      return;
+    }
+    try {
+      const response = await api.post<{ success: boolean; data: any }>(
+        `/screening/compare/${selectedJob}`,
+        { applicantIds: selectedForComparison },
+        token || undefined
+      );
+      if (response.success) {
+        setComparisonResult(response.data);
+        setShowComparison(true);
+      }
+    } catch (error) {
+      console.error('Failed to compare candidates:', error);
+      showToast('Failed to compare candidates', 'error');
+    }
+  };
+
+  const generateInterviewQuestions = async (applicantId: string) => {
+    if (!selectedJob) return;
+    setLoadingQuestions(true);
+    try {
+      const response = await api.get<{ success: boolean; data: { questions: string[] } }>(
+        `/chat/questions/${selectedJob}/${applicantId}`,
+        token || undefined
+      );
+      if (response.success) {
+        setInterviewQuestions(response.data.questions);
+      }
+    } catch (error) {
+      console.error('Failed to generate questions:', error);
+      showToast('Failed to generate interview questions', 'error');
+    } finally {
+      setLoadingQuestions(false);
+    }
+  };
+
   return (
-    <div className="p-4 sm:p-6">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 sm:mb-6">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900">AI Screening</h1>
           <p className="text-sm sm:text-base text-slate-500">Run AI-powered candidate screening</p>
         </div>
-       <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-start sm:items-center">
-           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 items-start sm:items-center">
-             <select
-               value={selectedJob}
-               onChange={(e) => { setSelectedJob(e.target.value); setCurrentPage(1); }}
-               className="px-3 sm:px-4 py-2 border border-slate-200 rounded-lg text-sm sm:text-base w-full sm:w-auto"
-             >
-               <option value="">Select Job</option>
-               {jobs.map(job => (
-                 <option key={job._id} value={job._id}>{job.title}</option>
-               ))}
-             </select>
-           </div>
-           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 items-start sm:items-center">
-             <label className="text-xs sm:text-sm text-slate-500 mb-1">Threshold</label>
-             <input
-               type="number"
-               value={threshold}
-               onChange={(e) => setThreshold(parseInt(e.target.value) || 0)}
-               min={0}
-               max={100}
-               className="w-full sm:w-auto px-3 sm:px-4 py-2 border border-slate-200 rounded-lg text-sm sm:text-base"
-               placeholder="0"
-             />
-           </div>
-<div className="flex flex-col sm:flex-row gap-2 sm:gap-3 items-start sm:items-center">
-              <label className="text-xs sm:text-sm text-slate-500 mb-1">Shortlist Threshold</label>
-              <input
-                type="number"
-                value={shortlistThreshold}
-                onChange={(e) => setShortlistThreshold(parseInt(e.target.value) || 75)}
-                min={0}
-                max={100}
-                className="w-full sm:w-auto px-3 sm:px-4 py-2 border border-slate-200 rounded-lg text-sm sm:text-base"
-                placeholder="75"
-              />
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 items-start sm:items-center">
-              <label className="text-xs sm:text-sm text-slate-500 mb-1">Mode</label>
-              <select
-                value={screeningMode}
-                onChange={(e) => setScreeningMode(e.target.value as 'standard' | 'best' | 'advanced')}
-                className="px-3 sm:px-4 py-2 border border-slate-200 rounded-lg text-sm sm:text-base w-full sm:w-auto"
-              >
-                <option value="standard">Standard</option>
-                <option value="best">Best Match</option>
-                <option value="advanced">Advanced</option>
-              </select>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 items-start sm:items-center">
-              <label className="text-xs sm:text-sm text-slate-500 mb-1">&nbsp;</label>
-              <button
-                onClick={runScreening}
-                disabled={!selectedJob || running}
-                className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm sm:text-base w-full sm:w-auto justify-center"
-              >
-                <FaPlay /> {running ? 'Running...' : 'Run'}
-              </button>
-            </div>
-         </div>
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-start sm:items-center">
+          <select
+            value={selectedJob}
+            onChange={(e) => { setSelectedJob(e.target.value); setCurrentPage(1); setSelectedForComparison([]); }}
+            className="px-3 sm:px-4 py-2 border border-slate-200 rounded-lg text-sm sm:text-base w-full sm:w-auto"
+          >
+            <option value="">Select Job</option>
+            {jobs.map(job => (
+              <option key={job._id} value={job._id}>{job.title}</option>
+            ))}
+          </select>
+          <button
+            onClick={runScreening}
+            disabled={!selectedJob || running}
+            className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm sm:text-base w-full sm:w-auto justify-center"
+          >
+            <FaPlay /> {running ? 'Running...' : 'Run'}
+          </button>
+          <button
+            onClick={rerunScreening}
+            disabled={!selectedJob || running || results.length === 0}
+            className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 text-sm sm:text-base w-full sm:w-auto justify-center"
+          >
+            <FaPlay /> Re-run
+          </button>
+          {selectedForComparison.length > 0 && (
+            <button
+              onClick={compareCandidates}
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm sm:text-base w-full sm:w-auto justify-center"
+            >
+              <FaUser /> Compare ({selectedForComparison.length})
+            </button>
+          )}
+        </div>
       </div>
 
       {selectedJob && stats && (
@@ -341,13 +396,28 @@ const runScreening = async () => {
       ) : (
         <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
           <div className="overflow-x-auto max-h-[60vh]">
-            <table className="w-full min-w-[550px]">
+            <table className="w-full min-w-[650px]">
               <thead className="bg-slate-50 border-b border-slate-100 sticky top-0 z-10">
                 <tr>
+                  <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-semibold text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={selectedForComparison.length === results.filter(r => r.applicantId?._id).length && results.filter(r => r.applicantId?._id).length > 0}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedForComparison(results.filter(r => r.applicantId?._id).map(r => r.applicantId!._id));
+                        } else {
+                          setSelectedForComparison([]);
+                        }
+                      }}
+                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    />
+                  </th>
                   <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-semibold text-slate-600">Rank</th>
                   <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-semibold text-slate-600">Candidate</th>
                   <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-semibold text-slate-600 hidden sm:table-cell">Score</th>
                   <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-semibold text-slate-600">Status</th>
+                  <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-semibold text-slate-600 hidden lg:table-cell">API Match</th>
                   <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-semibold text-slate-600 hidden md:table-cell">Strengths</th>
                   <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-semibold text-slate-600">Action</th>
                 </tr>
@@ -356,6 +426,23 @@ const runScreening = async () => {
                 {results.map((result) => (
                   <tr key={result._id} className="border-b border-slate-50 hover:bg-slate-50">
                     <td className="p-3 sm:p-4">
+                      <input
+                        type="checkbox"
+                        checked={result.applicantId?._id ? selectedForComparison.includes(result.applicantId._id) : false}
+                        onChange={(e) => {
+                          if (result.applicantId?._id) {
+                            if (e.target.checked) {
+                              setSelectedForComparison(prev => [...prev, result.applicantId!._id]);
+                            } else {
+                              setSelectedForComparison(prev => prev.filter(id => id !== result.applicantId!._id));
+                            }
+                          }
+                        }}
+                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        disabled={!result.applicantId?._id}
+                      />
+                    </td>
+                    <td className="p-3 sm:p-4">
                       <span className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-bold text-xs sm:text-sm ${
                         result.ranking <= 3 ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-100 text-slate-600'
                       }`}>
@@ -363,8 +450,8 @@ const runScreening = async () => {
                       </span>
                     </td>
                     <td className="p-3 sm:p-4">
-                      <p className="font-medium text-slate-900 text-sm">{result.applicantId?.name}</p>
-                      <p className="text-xs sm:text-sm text-slate-500 hidden sm:block">{result.applicantId?.email}</p>
+                      <p className="font-medium text-slate-900 text-sm">{result.applicantId?.name || 'Applicant Data Unavailable'}</p>
+                      <p className="text-xs sm:text-sm text-slate-500 hidden sm:block">{result.applicantId?.email || 'Contact support if issue persists'}</p>
                     </td>
                     <td className="p-3 sm:p-4 hidden sm:table-cell">
                       <div className="flex items-center gap-2">
@@ -377,9 +464,35 @@ const runScreening = async () => {
                       </div>
                     </td>
                     <td className="p-3 sm:p-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${getStatusBadge(result.status)}`}>
-                        {result.status}
-                      </span>
+                      <select
+                        value={result.status}
+                        onChange={(e) => result.applicantId?._id && updateCandidateStatus(result.applicantId._id, e.target.value)}
+                        className="px-2 py-1 border border-slate-200 rounded text-xs font-medium capitalize focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        disabled={!result.applicantId?._id}
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="shortlisted">Shortlisted</option>
+                        <option value="interview">Interview</option>
+                        <option value="rejected">Rejected</option>
+                      </select>
+                    </td>
+                    <td className="p-3 sm:p-4 hidden lg:table-cell">
+                      {result.matchDetails && (
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-slate-500">Skills:</span>
+                            <span className={`text-xs font-medium ${result.matchDetails.skillsMatch >= 70 ? 'text-green-600' : result.matchDetails.skillsMatch >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>
+                              {result.matchDetails.skillsMatch}%
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-slate-500">Exp:</span>
+                            <span className={`text-xs font-medium ${result.matchDetails.experienceMatch >= 70 ? 'text-green-600' : result.matchDetails.experienceMatch >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>
+                              {result.matchDetails.experienceMatch}%
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </td>
                     <td className="p-3 sm:p-4 hidden md:table-cell">
                       <div className="flex flex-wrap gap-1">
@@ -401,7 +514,7 @@ const runScreening = async () => {
               </tbody>
             </table>
           </div>
-          
+
           {totalPages > 1 && (
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border-t border-slate-100">
               <p className="text-sm text-slate-500">
@@ -455,13 +568,73 @@ const runScreening = async () => {
         </div>
       )}
 
+      {showComparison && comparisonResult && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="p-4 sm:p-6 border-b border-slate-100 flex justify-between items-center">
+              <div>
+                <h2 className="text-lg sm:text-xl font-bold text-slate-900">Candidate Comparison</h2>
+                <p className="text-sm text-slate-500">Comparing {selectedForComparison.length} candidates</p>
+              </div>
+              <button onClick={() => { setShowComparison(false); setComparisonResult(null); }} className="text-slate-400 hover:text-slate-600 text-2xl">×</button>
+            </div>
+            <div className="p-4 sm:p-6 space-y-6">
+              {comparisonResult.candidates?.map((candidate: any, index: number) => (
+                <div key={candidate.applicantId} className="border border-slate-200 rounded-lg p-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    <span className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-white text-xs ${
+                      index === 0 ? 'bg-yellow-500' : index === 1 ? 'bg-slate-500' : 'bg-slate-400'
+                    }`}>
+                      {index + 1}
+                    </span>
+                    <h3 className="font-semibold text-slate-900">{candidate.name}</h3>
+                    <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">{candidate.score}%</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <h4 className="font-medium text-slate-700 mb-2">Strengths</h4>
+                      <div className="space-y-1">
+                        {candidate.strengths?.map((strength: string, i: number) => (
+                          <div key={i} className="flex items-start gap-2">
+                            <span className="text-green-500 mt-0.5">•</span>
+                            <span className="text-sm text-slate-600">{strength}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-slate-700 mb-2">Comparison Notes</h4>
+                      <div className="space-y-1">
+                        {candidate.comparisonNotes?.map((note: string, i: number) => (
+                          <div key={i} className="flex items-start gap-2">
+                            <span className="text-blue-500 mt-0.5">•</span>
+                            <span className="text-sm text-slate-600">{note}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {comparisonResult.overallRecommendation && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h3 className="font-semibold text-blue-900 mb-2">Overall Recommendation</h3>
+                  <p className="text-blue-800">{comparisonResult.overallRecommendation}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {selectedResult && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="p-4 sm:p-6 border-b border-slate-100 flex justify-between items-center">
               <div>
-                <h2 className="text-lg sm:text-xl font-bold text-slate-900">{selectedResult.applicantId?.name}</h2>
-                <p className="text-sm text-slate-500 hidden sm:block">{selectedResult.applicantId?.email}</p>
+                <h2 className="text-lg sm:text-xl font-bold text-slate-900">{selectedResult.applicantId?.name || 'Applicant Data Unavailable'}</h2>
+                <p className="text-sm text-slate-500 hidden sm:block">{selectedResult.applicantId?.email || 'Contact support if issue persists'}</p>
               </div>
               <button onClick={() => setSelectedResult(null)} className="text-slate-400 hover:text-slate-600 text-2xl">×</button>
             </div>
@@ -469,7 +642,7 @@ const runScreening = async () => {
               <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                 <div className="flex-1 text-center p-3 sm:p-4 bg-blue-50 rounded-xl">
                   <p className="text-2xl sm:text-3xl font-bold text-blue-600">{selectedResult.score}%</p>
-                  <p className="text-xs sm:text-sm text-slate-500">Match Score</p>
+                  <p className="text-xs sm:text-sm text-slate-500">Overall Match</p>
                 </div>
                 <div className="flex-1 text-center p-3 sm:p-4 bg-slate-50 rounded-xl">
                   <p className="text-2xl sm:text-3xl font-bold">#{selectedResult.ranking}</p>
@@ -479,9 +652,53 @@ const runScreening = async () => {
                   <p className="text-sm sm:text-lg font-semibold text-green-700">
                     {selectedResult.score >= 80 ? 'Strong' : selectedResult.score >= 60 ? 'Good' : 'Low'}
                   </p>
-                  <p className="text-xs sm:text-sm text-slate-500">Status</p>
+                  <p className="text-xs sm:text-sm text-slate-500">Recommendation</p>
                 </div>
               </div>
+
+              {selectedResult.matchDetails && (
+                <div>
+                  <h3 className="font-semibold text-slate-900 mb-3 text-sm sm:text-base">Detailed Match Analysis</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                    <div className="text-center p-3 bg-blue-50 rounded-lg">
+                      <p className="text-lg font-bold text-blue-600">{selectedResult.matchDetails.skillsMatch}%</p>
+                      <p className="text-xs text-slate-500">Skills Match</p>
+                    </div>
+                    <div className="text-center p-3 bg-green-50 rounded-lg">
+                      <p className="text-lg font-bold text-green-600">{selectedResult.matchDetails.experienceMatch}%</p>
+                      <p className="text-xs text-slate-500">Experience Match</p>
+                    </div>
+                    <div className="text-center p-3 bg-purple-50 rounded-lg">
+                      <p className="text-lg font-bold text-purple-600">{selectedResult.matchDetails.educationMatch}%</p>
+                      <p className="text-xs text-slate-500">Education Match</p>
+                    </div>
+                    <div className="text-center p-3 bg-orange-50 rounded-lg">
+                      <p className="text-lg font-bold text-orange-600">{selectedResult.matchDetails.overallMatch}%</p>
+                      <p className="text-xs text-slate-500">Overall Match</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {selectedResult.biasAlerts && selectedResult.biasAlerts.length > 0 && (
+                <div>
+                  <h3 className="font-semibold text-slate-900 mb-3 text-sm sm:text-base">Bias Alerts</h3>
+                  <div className="space-y-3">
+                    {selectedResult.biasAlerts.map((alert, index) => (
+                      <div key={index} className={`p-3 rounded-lg border ${alert.severity === 'high' ? 'bg-red-50 border-red-200' : alert.severity === 'medium' ? 'bg-yellow-50 border-yellow-200' : 'bg-blue-50 border-blue-200'}`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${alert.severity === 'high' ? 'bg-red-100 text-red-700' : alert.severity === 'medium' ? 'bg-yellow-100 text-yellow-700' : 'bg-blue-100 text-blue-700'}`}>
+                            {alert.severity.toUpperCase()}
+                          </span>
+                          <span className="font-medium text-slate-900 text-sm">{alert.type}</span>
+                        </div>
+                        <p className="text-sm text-slate-600 mb-1">{alert.description}</p>
+                        <p className="text-sm text-green-700"><strong>Suggestion:</strong> {alert.suggestion}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <p className="text-sm font-medium text-slate-700 mb-2">Key Strengths</p>
@@ -507,6 +724,30 @@ const runScreening = async () => {
                   {selectedResult.reasoning}
                 </div>
               </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => selectedResult.applicantId?._id && generateInterviewQuestions(selectedResult.applicantId._id)}
+                  disabled={loadingQuestions || !selectedResult.applicantId?._id}
+                  className="flex-1 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 text-sm"
+                >
+                  {loadingQuestions ? 'Generating...' : 'Generate Interview Questions'}
+                </button>
+              </div>
+
+              {interviewQuestions.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-slate-700 mb-2">Suggested Interview Questions</p>
+                  <div className="space-y-2">
+                    {interviewQuestions.map((question, index) => (
+                      <div key={index} className="flex items-start gap-2">
+                        <span className="text-purple-600 font-bold text-sm">{index + 1}.</span>
+                        <p className="text-slate-700 text-sm">{question}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

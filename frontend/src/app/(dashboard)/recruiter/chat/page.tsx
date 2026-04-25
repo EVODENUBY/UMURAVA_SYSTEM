@@ -36,43 +36,12 @@ interface ChatSession {
   updatedAt?: string;
 }
 
-const quickActions = [
-  {
-    label: 'Top Candidates',
-    icon: FaStar,
-    prompt: 'Who are the top 5 candidates for this job?',
-    color: 'from-amber-500 to-orange-500'
-  },
-  {
-    label: 'Skills Analysis',
-    icon: FaChartLine,
-    prompt: 'What skills are most common among candidates?',
-    color: 'from-blue-500 to-cyan-500'
-  },
-  {
-    label: 'Interview Questions',
-    icon: FaQuestionCircle,
-    prompt: 'Suggest interview questions for the top candidate',
-    color: 'from-purple-500 to-pink-500'
-  },
-  {
-    label: 'Job Analysis',
-    icon: FaFileAlt,
-    prompt: 'Analyze the job requirements and suggest improvements',
-    color: 'from-green-500 to-emerald-500'
-  },
-  {
-    label: 'Candidate Comparison',
-    icon: FaUsers,
-    prompt: 'Compare the top 3 candidates side by side',
-    color: 'from-indigo-500 to-violet-500'
-  },
-  {
-    label: 'Search Candidates',
-    icon: FaSearch,
-    prompt: 'Find candidates with Python and AWS skills',
-    color: 'from-rose-500 to-red-500'
-  }
+const quickQuestions = [
+  'Who are the top 5 candidates?',
+  'What skills are most common?',
+  'Suggest interview questions',
+  'Analyze job requirements',
+  'Explain hiring decisions',
 ];
 
 export default function ChatPage() {
@@ -84,7 +53,18 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const [showSidebar, setShowSidebar] = useState(true);
+  const [currentSession, setCurrentSession] = useState<ChatSession | null>(null);
+
+  useEffect(() => {
+    if (currentSession) {
+      setMessages(currentSession.messages || []);
+    } else {
+      setMessages([]);
+    }
+  }, [currentSession]);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmMessage, setConfirmMessage] = useState('');
+  const [confirmAction, setConfirmAction] = useState<() => void>(() => {});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -124,39 +104,47 @@ export default function ChatPage() {
     }
   };
 
-  const parseAssistantResponse = (content: string): ChatMessage => {
-    let structuredData = undefined;
-    let cleanContent = content;
-
-    const candidatesMatch = content.match(/\*\*Top Candidates\*\*|Top Candidates|CANDIDATES:/i);
-    if (candidatesMatch) {
-      const lines = content.split('\n').filter(l => l.trim());
-      const candidates: CandidateInfo[] = [];
-      
-      lines.forEach(line => {
-        const rankMatch = line.match(/^\d+[\.\)]\s*(.+)/);
-        const scoreMatch = line.match(/\d+%|\d+\/100/);
-        const emailMatch = line.match(/<([^>]+)>|[\w.-]+@[\w.-]+\.\w+/);
-        
-        if (rankMatch || scoreMatch) {
-          const name = rankMatch ? rankMatch[1].replace(/\*\*/g, '').trim() : 'Unknown';
-          const score = scoreMatch ? parseInt(scoreMatch[0]) : 0;
-          candidates.push({ name, score, email: emailMatch?.[0] || '' });
-        }
-      });
-
-      if (candidates.length > 0) {
-        structuredData = { type: 'candidates' as const, data: candidates };
-        cleanContent = content;
+  const createNewSession = async () => {
+    try {
+      const response = await api.post<{ success: boolean; data: ChatSession }>(
+        '/chat',
+        { title: `Chat ${new Date().toLocaleString()}` },
+        token || undefined
+      );
+      if (response.success) {
+        setCurrentSession(response.data);
+        setMessages([]);
+        fetchChats();
+        showToast('New chat session created', 'success');
       }
+    } catch (error) {
+      console.error('Failed to create session:', error);
+      showToast('Failed to create new session', 'error');
     }
+  };
 
-    return {
-      role: 'assistant',
-      content: cleanContent,
-      timestamp: new Date().toISOString(),
-      structuredData
-    };
+  const loadSession = async (sessionId: string) => {
+    const session = sessions.find(s => s._id === sessionId);
+    if (session) {
+      setCurrentSession(session);
+    }
+  };
+
+  const deleteSession = async (sessionId: string) => {
+    showConfirmation('Are you sure you want to delete this chat session?', async () => {
+      try {
+        await api.delete(`/chat/${sessionId}`, token || undefined);
+        if (currentSession?._id === sessionId) {
+          setCurrentSession(null);
+          setMessages([]);
+        }
+        fetchChats();
+        showToast('Chat session deleted', 'success');
+      } catch (error) {
+        console.error('Failed to delete session:', error);
+        showToast('Failed to delete session', 'error');
+      }
+    });
   };
 
   const sendMessage = async (text?: string) => {
@@ -168,19 +156,53 @@ export default function ChatPage() {
       content: messageText,
       timestamp: new Date().toISOString(),
     };
-    setMessages(prev => [...prev, userMessage]);
+    const newMessages = [...messages, userMessage];
+    setMessages(newMessages);
     setMessage('');
     setLoading(true);
 
     try {
-      const response = await api.post<{ success: boolean; data: { response: string } }>(
-        '/api/chat/message',
-        { message: messageText, jobId: selectedJob || undefined },
-        token || undefined
-      );
-      if (response.success) {
-        const assistantMessage = parseAssistantResponse(response.data.response);
-        setMessages(prev => [...prev, assistantMessage]);
+      // Check if this is a request for decision explanations
+      if (messageText.toLowerCase().includes('explain') && messageText.toLowerCase().includes('decision')) {
+        if (!selectedJob) {
+          const assistantMessage: ChatMessage = {
+            role: 'assistant',
+            content: 'Please select a specific job first to get decision explanations.',
+            timestamp: new Date().toISOString(),
+          };
+          setMessages([...newMessages, assistantMessage]);
+        } else {
+          // For now, provide general explanations. In a full implementation, this would require applicant selection
+          const assistantMessage: ChatMessage = {
+            role: 'assistant',
+            content: 'Decision explanations are available in the screening results. Click "View" on any candidate to see detailed AI reasoning for their score and status.',
+            timestamp: new Date().toISOString(),
+          };
+          setMessages([...newMessages, assistantMessage]);
+        }
+      } else {
+        const response = await api.post<{ success: boolean; data: { response: string } }>(
+          '/chat/message',
+          { message: messageText, jobId: selectedJob || undefined, sessionId: currentSession?._id },
+          token || undefined
+        );
+        if (response.success) {
+          const assistantMessage: ChatMessage = {
+            role: 'assistant',
+            content: response.data.response,
+            timestamp: new Date().toISOString(),
+          };
+          const updatedMessages = [...newMessages, assistantMessage];
+          setMessages(updatedMessages);
+
+          // Update current session
+          if (currentSession) {
+            setCurrentSession({
+              ...currentSession,
+              messages: updatedMessages
+            });
+          }
+        }
       }
     } catch (error: any) {
       console.error('Failed to send message:', error);
@@ -189,7 +211,7 @@ export default function ChatPage() {
         content: `I encountered an error processing your request. ${error?.response?.data?.error?.message || 'Please try again.'}`,
         timestamp: new Date().toISOString(),
       };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages([...newMessages, errorMessage]);
     } finally {
       setLoading(false);
     }
@@ -212,41 +234,45 @@ export default function ChatPage() {
     return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const getScoreColor = (score: number) => {
-    if (score >= 80) return 'text-green-600 bg-green-50';
-    if (score >= 60) return 'text-blue-600 bg-blue-50';
-    if (score >= 40) return 'text-yellow-600 bg-yellow-50';
-    return 'text-red-600 bg-red-50';
-  };
-
-  const renderMessageContent = (msg: ChatMessage) => {
-    if (msg.structuredData?.type === 'candidates' && msg.structuredData.data.length > 0) {
-      return (
-        <div className="space-y-3">
-          <div className="prose prose-sm max-w-none">
-            {msg.content.split('\n').slice(0, 3).map((line, i) => (
-              line.trim() && !line.match(/^\d+[\.\)]\s*/) && (
-                <p key={i} className="text-sm text-slate-600 mb-2">{line.replace(/\*\*/g, '')}</p>
-              )
-            ))}
+      <div className="flex-1 flex gap-3 sm:gap-6 min-h-0">
+        <div className="w-48 sm:w-64 bg-white rounded-xl shadow-sm border border-slate-100 p-3 sm:p-4 hidden md:block">
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <h3 className="font-semibold text-slate-900 text-sm sm:text-base">Chat Sessions</h3>
+            <div className="flex gap-2">
+              <button
+                onClick={createNewSession}
+                className="text-blue-600 hover:text-blue-800"
+                title="New Chat"
+              >
+                <FaComments className="w-3.5 h-4" />
+              </button>
+              <button onClick={() => showConfirmation('Are you sure you want to clear the chat history?', clearChat)} className="text-slate-400 hover:text-red-500">
+                <FaTrash className="w-3.5 h-4" />
+              </button>
+            </div>
           </div>
           <div className="space-y-2">
-            {msg.structuredData.data.slice(0, 5).map((c: CandidateInfo, i: number) => (
-              <div key={i} className="flex items-center gap-3 p-2 bg-slate-50 rounded-lg">
-                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                  i === 0 ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-600'
-                }`}>
-                  #{i + 1}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-slate-900 text-sm truncate">{c.name}</p>
-                  {c.email && <p className="text-xs text-slate-500 truncate">{c.email}</p>}
-                </div>
-                {c.score > 0 && (
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getScoreColor(c.score)}`}>
-                    {c.score}%
-                  </span>
-                )}
+            {sessions.map((session) => (
+              <div
+                key={session._id}
+                className={`p-2 sm:p-3 rounded-lg transition-colors ${
+                  currentSession?._id === session._id ? 'bg-blue-50 border border-blue-200' : 'hover:bg-slate-50'
+                }`}
+              >
+                <button
+                  onClick={() => loadSession(session._id)}
+                  className="w-full text-left"
+                >
+                  <p className="font-medium text-slate-900 text-sm truncate">{session.title}</p>
+                  <p className="text-xs text-slate-500">{session.messages?.length || 0} msgs</p>
+                </button>
+                <button
+                  onClick={() => deleteSession(session._id)}
+                  className="float-right text-red-500 hover:text-red-700 text-xs mt-1"
+                  title="Delete session"
+                >
+                  <FaTrash className="w-3 h-3" />
+                </button>
               </div>
             ))}
           </div>
