@@ -49,7 +49,7 @@ export default function AnalyticsPage() {
 
   const statCards = [
     {
-      label: 'Total Jobs',
+      label: 'Total_ Jobs',
       value: analytics?.overview.totalJobs || 0,
       icon: <FaBriefcase />,
       bgColor: 'bg-blue-500',
