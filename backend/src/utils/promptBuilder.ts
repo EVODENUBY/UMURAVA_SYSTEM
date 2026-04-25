@@ -39,7 +39,24 @@ export interface ScreeningOutput {
 export interface ChatContext {
   job?: IJob;
   candidates?: (IApplicant | any)[];
-  results?: CandidateEvaluation[];
+  results?: ChatResult[];
+}
+
+export interface ChatResult {
+  candidateId: string;
+  candidateName?: string;
+  score: number;
+  strengths?: string[];
+  gaps?: string[];
+  reasoning?: string;
+  matchDetails?: {
+    skillsMatch: number;
+    experienceMatch: number;
+    educationMatch: number;
+    overallMatch: number;
+  };
+  ranking?: number;
+  status?: string;
 }
 
 export interface SkillGapOutput {
@@ -432,47 +449,76 @@ Analyze the profile and provide:
 }`;
   }
 
-  /**
+/**
    * Chat prompt for conversational recruiter assistant
    */
   static buildChatPrompt(message: string, context?: ChatContext): string {
     let contextPrompt = '';
-    
+
     if (context?.job) {
       contextPrompt += `\n\n## REFERENCE JOB\n${this.formatJobContext(context.job)}`;
     }
-    
+
     if (context?.candidates && context.candidates.length > 0) {
-      contextPrompt += `\n\n## REFERENCE CANDIDATES\n${context.candidates.map((c: any, i: number) => 
+      contextPrompt += `\n\n## REFERENCE CANDIDATES\n${context.candidates.map((c: any, i: number) =>
         this.formatCandidateContext(c, i + 1)
       ).join('\n\n---\n\n')}`;
     }
 
     if (context?.results && context.results.length > 0) {
-      contextPrompt += `\n\n## CANDIDATE EVALUATIONS\n${JSON.stringify(context.results, null, 2)}`;
+      contextPrompt += `\n\n## CANDIDATE EVALUATIONS\n${context.results.map(r => `
+Candidate: ${r.candidateId}
+Score: ${r.score}/100
+Strengths: ${r.strengths?.join(', ') || 'N/A'}
+Gaps: ${r.gaps?.join(', ') || 'N/A'}
+Status: ${r.status}
+Ranking: ${r.ranking || 'N/A'}
+`).join('\n')}`;
     }
 
-    return `You are a Conversational Recruiter Assistant (AI Hiring Copilot). 
+    return `You are an Expert AI Recruitment Assistant (Umurava AI Copilot).
+You help recruiters with hiring decisions, candidate analysis, and workforce planning.
 
 ## RECRUITER QUESTION
 "${message}"
 ${contextPrompt}
 
-## RESPONSE GUIDELINES
-- Be professional, concise, and actionable
-- Use DATA when available (scores, percentages, rankings)
-- Provide CLEAR recommendations
-- Explain reasoning when comparing candidates
-- If uncertain, acknowledge limitations
-- Suggest next steps when appropriate
+## RESPONSE STYLE GUIDELINES
+- **Be conversational yet professional** - like a senior HR advisor
+- **Use formatting** - Use **bold** for key terms, numbers, and important points
+- **Be specific with data** - Reference exact scores, percentages, and rankings when available
+- **Structure your response** - Use bullet points or numbered lists for clarity
+- **Provide actionable insights** - Give clear recommendations with next steps
+- **Explain your reasoning** - Help recruiters understand the "why" behind suggestions
 
-If asked to:
-- Compare candidates → Show side-by-side with specific reasons
-- Explain decisions → Use the "Explainable AI" format
-- Check bias → Highlight any concerns found
-- Recommend actions → Be specific and prioritized
+## RESPONSE STRUCTURE PREFERENCES
+When answering questions, format your response for easy reading:
 
-Keep responses conversational but informative.`;
+1. **Direct Answer First** - Start with the most relevant answer
+2. **Use Bullet Points** - For lists of candidates, skills, or recommendations
+3. **Highlight Key Numbers** - Scores, percentages, rankings in **bold**
+4. **Add Context** - Brief explanation of why this is relevant
+5. **Suggest Next Steps** - What should the recruiter do next
+
+## EXAMPLE RESPONSE FORMAT
+If asked about top candidates:
+"Based on my analysis of the candidates, here are the **Top 3 performers** for the [Job Title] position:
+
+1. **Sarah Johnson** - **87/100** (Excellent fit)
+   - Strong match on Python, AWS, and system design
+   - 6 years relevant experience
+
+2. **Michael Chen** - **82/100** (Strong candidate)
+   - Best education match at 92%
+   - 4 years experience with startup experience
+
+3. **Emma Wilson** - **78/100** (Consider for interview)
+   - High growth potential
+   - Best communication skills
+
+**Recommendation:** Shortlist Sarah and Michael for the next round."
+
+Keep your response informative, well-structured, and helpful for making hiring decisions.`;
   }
 
   /**
@@ -584,9 +630,19 @@ Resume: ${applicant.resumeText ? applicant.resumeText.substring(0, 1000) + (appl
     let parsed: any;
     try {
       parsed = JSON.parse(jsonString);
-    } catch {
-      const fixed = PromptBuilder.fixJSON(jsonString);
-      parsed = JSON.parse(fixed);
+    } catch (e) {
+      try {
+        const fixed = PromptBuilder.fixJSON(jsonString);
+        parsed = JSON.parse(fixed);
+      } catch (e2) {
+        try {
+          const aggressiveFix = PromptBuilder.aggressiveJSONFix(jsonString);
+          parsed = JSON.parse(aggressiveFix);
+        } catch (e3) {
+          const lastResort = PromptBuilder.lastResortJSONFix(jsonString);
+          parsed = JSON.parse(lastResort);
+        }
+      }
     }
 
     if (!parsed.candidates || !Array.isArray(parsed.candidates)) {
@@ -600,7 +656,7 @@ Resume: ${applicant.resumeText ? applicant.resumeText.substring(0, 1000) + (appl
     };
   }
 
-  private static fixJSON(jsonString: string): string {
+private static fixJSON(jsonString: string): string {
     let fixed = jsonString;
 
     fixed = fixed.replace(/\}\s*\{/g, '},{');
@@ -609,46 +665,105 @@ Resume: ${applicant.resumeText ? applicant.resumeText.substring(0, 1000) + (appl
     fixed = fixed.replace(/,\s*\]/g, ']');
     fixed = fixed.replace(/,\s*\}/g, '}');
 
+    fixed = fixed.replace(/,(\s*[\]\}])/g, '$1');
+
+    const candidatesMatch = fixed.match(/"candidates"\s*:\s*\[([\s\S]*?)\]\s*,/);
+    if (candidatesMatch) {
+        let candidatesArray = candidatesMatch[1];
+        candidatesArray = candidatesArray.replace(/,(\s*[\]}])/g, '$1');
+        fixed = fixed.replace(/"candidates"\s*:\s*\[[\s\S]*?\]\s*,/, `"candidates": [${candidatesArray}],`);
+    }
+
     const stack: string[] = [];
     let result = '';
     let inString = false;
     let escape = false;
 
     for (let i = 0; i < fixed.length; i++) {
-      const char = fixed[i];
-      if (escape) {
+        const char = fixed[i];
+        if (escape) {
+            result += char;
+            escape = false;
+            continue;
+        }
+        if (char === '\\' && inString) {
+            result += char;
+            escape = true;
+            continue;
+        }
+        if (char === '"') {
+            inString = !inString;
+            result += char;
+            continue;
+        }
+        if (inString) {
+            result += char;
+            continue;
+        }
+        if (char === '[' || char === '{') {
+            stack.push(char);
+        } else if (char === ']' && stack[stack.length - 1] === '[') {
+            stack.pop();
+        } else if (char === '}' && stack[stack.length - 1] === '{') {
+            stack.pop();
+        } else if (char === ',' && stack.length === 0) {
+            continue;
+        }
         result += char;
-        escape = false;
-        continue;
-      }
-      if (char === '\\' && inString) {
-        result += char;
-        escape = true;
-        continue;
-      }
-      if (char === '"') {
-        inString = !inString;
-        result += char;
-        continue;
-      }
-      if (inString) {
-        result += char;
-        continue;
-      }
-      if (char === '[' || char === '{') {
-        stack.push(char);
-      } else if (char === ']' && stack[stack.length - 1] === '[') {
-        stack.pop();
-      } else if (char === '}' && stack[stack.length - 1] === '{') {
-        stack.pop();
-      } else if (char === ',' && stack.length === 0) {
-        continue;
-      }
-      result += char;
     }
 
     return result;
-  }
+}
+
+    private static aggressiveJSONFix(jsonString: string): string {
+        let fixed = jsonString;
+
+        fixed = fixed.replace(/([^\n])\s*\n\s*([^\n])/g, '$1 $2');
+
+        const arrayRegex = /\[([^\]]*)\]/g;
+        let match;
+        while ((match = arrayRegex.exec(fixed)) !== null) {
+            const content = match[1];
+            const cleanContent = content
+                .replace(/,\s*([}\]])/g, '$1')
+                .replace(/(\{)\s*,/g, '$1')
+                .replace(/,\s*([}\]])/g, '$1');
+            fixed = fixed.replace(match[0], `[${cleanContent}]`);
+        }
+
+        fixed = fixed.replace(/([{,])\s*(\d+)\s*:\s*([^\d\]\}][^,}]*?)(?=[,\}\]])/g, '$1"$2": $3,');
+        fixed = fixed.replace(/:\s*([^\s\[\]{}":,][^\]\}\],:]*?)(?=[,\}\]])/g, ': "$1"');
+        
+        fixed = fixed.replace(/([{,])\s*"([^"]*)"\s*:\s*,/g, '$1"$2": null,');
+        fixed = fixed.replace(/([{,])\s*(\d+)\s*:\s*,/g, '$1"$2": null,');
+        fixed = fixed.replace(/:\s*,\s*([}\]])/g, ': null$1');
+
+        return fixed;
+    }
+
+    private static lastResortJSONFix(jsonString: string): string {
+        let fixed = jsonString
+            .replace(/,\s*}/g, '}')
+            .replace(/,\s*]/g, ']')
+            .replace(/\[\s*\]/g, '[]')
+            .replace(/\{\s*\}/g, '{}');
+
+        const extractJson = fixed.match(/\{[\s\S]*\}/);
+        if (extractJson) {
+            fixed = extractJson[0];
+        }
+
+        const lines = fixed.split('\n');
+        const cleaned = lines.map(line => {
+            line = line.trim();
+            if (line.endsWith(',')) {
+                line = line.replace(/,(?=\s*[}\]])/g, '');
+            }
+            return line;
+        }).filter(line => line.length > 0);
+
+        return '{' + cleaned.join('') + '}';
+    }
 }
 
 export default PromptBuilder;

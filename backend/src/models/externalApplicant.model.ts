@@ -25,7 +25,7 @@ export interface IExternalApplicant extends Document {
   resumeLink?: string;
   source: 'pdf' | 'csv' | 'excel' | 'link' | 'manual';
   jobId?: Types.ObjectId;
-  status: 'screening' | 'interview' | 'offer' | 'hired' | 'rejected';
+  status: 'pending' | 'applied' | 'screening' | 'shortlisted' | 'interview' | 'offer' | 'hired' | 'rejected';
   createdAt: Date;
   updatedAt: Date;
 }

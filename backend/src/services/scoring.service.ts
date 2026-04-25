@@ -35,18 +35,21 @@ export class ScoringService {
       topN 
     });
 
-    // Sort by score descending
+    if (evaluations.length === 0) {
+      logger.warn('No evaluations provided for ranking');
+      return [];
+    }
+
     const sortedEvaluations = [...evaluations].sort((a, b) => b.score - a.score);
 
-    // Don't filter by threshold - rank ALL candidates
     let filteredEvaluations = sortedEvaluations;
     
     if (topN && topN > 0) {
       filteredEvaluations = filteredEvaluations.slice(0, topN);
     }
 
-    // Assign rankings and status to ALL candidates
-    const ranked: RankedCandidate[] = sortedEvaluations.map((evaluation, index) => {
+    let rankingCounter = 1;
+    const ranked: RankedCandidate[] = filteredEvaluations.map((evaluation) => {
       let status: 'shortlisted' | 'rejected' | 'interview' | 'pending' = 'pending';
 
       if (autoShortlist) {
@@ -61,14 +64,20 @@ export class ScoringService {
 
       return {
         ...evaluation,
-        ranking: index + 1,
+        ranking: rankingCounter++,
         status
       };
     });
 
+    if (ranked.length === 0) {
+      throw new Error('Ranking failed: No candidates could be ranked');
+    }
+
     logger.info('Candidates ranked successfully', { 
       rankedCount: ranked.length,
-      shortlisted: ranked.filter(r => r.status === 'shortlisted').length
+      shortlisted: ranked.filter(r => r.status === 'shortlisted').length,
+      firstRanking: ranked[0]?.ranking,
+      lastRanking: ranked[ranked.length - 1]?.ranking
     });
 
     return ranked;

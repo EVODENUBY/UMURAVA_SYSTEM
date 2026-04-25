@@ -6,6 +6,47 @@ import InternalApplicant from '../models/internalApplicant.model';
 import ExternalApplicant from '../models/externalApplicant.model';
 import Job from '../models/job.model';
 
+interface ApplicantInfo {
+  _id: mongoose.Types.ObjectId;
+  name: string;
+  email: string;
+  skills: string[];
+  experience?: any;
+  education?: any[];
+}
+
+async function getApplicantInfo(applicantId: mongoose.Types.ObjectId): Promise<ApplicantInfo | null> {
+  const externalApp = await ExternalApplicant.findById(applicantId).select('name email skills experience education');
+  if (externalApp) {
+    return {
+      _id: externalApp._id,
+      name: externalApp.name || 'Unknown',
+      email: externalApp.email || '',
+      skills: externalApp.skills || [],
+      experience: externalApp.experience,
+      education: externalApp.education
+    };
+  }
+
+  const internalApp = await InternalApplicant.findById(applicantId)
+    .populate('userId', 'firstName lastName email')
+    .populate('talentProfileId', 'skills experience education');
+  if (internalApp) {
+    const user = (internalApp as any).userId;
+    const talentProfile = (internalApp as any).talentProfileId;
+    return {
+      _id: internalApp._id,
+      name: user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Unknown',
+      email: user?.email || '',
+      skills: talentProfile?.skills || [],
+      experience: talentProfile?.experience,
+      education: talentProfile?.education
+    };
+  }
+
+  return null;
+}
+
 const router = Router();
 
 /**
@@ -40,29 +81,30 @@ router.get('/', protect, authorize('recruiter', 'admin'), async (req: Request, r
     const { jobId, includeReasons } = req.query;
     const showReasons = includeReasons !== 'false';
 
-    const query: any = { status: { $in: ['shortlisted', 'interview', 'offer'] } };
+    const query: any = {};
     if (jobId && mongoose.isValidObjectId(jobId)) {
       query.jobId = jobId;
+      query.status = { $in: ['shortlisted', 'interview', 'offer'] };
     }
 
     const results = await Result.find(query)
       .populate('jobId', 'title requiredSkills experience')
-      .populate('applicantId', 'name email phone skills experience education')
       .sort({ score: -1, ranking: 1 });
 
-    const shortlisted = results.map(r => {
+    const allCandidates = await Promise.all(results.map(async (r, idx: number) => {
       const job = r.jobId as any;
-      const applicant = r.applicantId as any;
+      const applicantInfo = await getApplicantInfo(r.applicantId as mongoose.Types.ObjectId);
+
       return {
         _id: r._id,
         jobId: job?._id,
         jobTitle: job?.title,
-        applicantId: applicant?._id,
-        applicantName: applicant?.name,
-        applicantEmail: applicant?.email,
-        applicantSkills: applicant?.skills,
+        applicantId: r.applicantId,
+        applicantName: applicantInfo?.name || 'Unknown',
+        applicantEmail: applicantInfo?.email || '',
+        applicantSkills: (applicantInfo?.skills || []).map((s: any) => s.name || s),
         score: r.score,
-        ranking: r.ranking,
+        ranking: idx + 1,
         status: r.status,
         matchDetails: r.matchDetails,
         strengths: showReasons ? r.strengths : undefined,
@@ -71,13 +113,27 @@ router.get('/', protect, authorize('recruiter', 'admin'), async (req: Request, r
         biasAlerts: showReasons ? r.biasAlerts : undefined,
         createdAt: r.createdAt
       };
-    });
+    }));
 
-    res.json({ success: true, data: shortlisted });
-  } catch (error) {
-    res.status(500).json({ success: false, error: { message: 'Server error fetching shortlist' } });
+    const scores = allCandidates.map(c => c.score);
+    const stats = {
+      highestScore: scores.length > 0 ? Math.max(...scores) : 0,
+      lowestScore: scores.length > 0 ? Math.min(...scores) : 0,
+      averageScore: scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0,
+      total: allCandidates.length
+    };
+
+    res.json({ success: true, data: allCandidates, statistics: stats });
+  } catch (error: any) {
+    const errorMessage = error?.message || '';
+    if (errorMessage.includes('429') || errorMessage.includes('rate limit') || errorMessage.includes('Too many requests') || errorMessage.includes('quota')) {
+      res.status(429).json({ success: false, error: { message: 'Model is busy due to high demand. Please try again in a few moments.' } });
+    } else {
+      res.status(500).json({ success: false, error: { message: 'Server error. Please try again.' } });
+    }
   }
 });
+ 
 
 /**
  * @swagger
@@ -112,40 +168,74 @@ router.get('/jobs/:jobId', protect, authorize('recruiter', 'admin'), async (req:
       return res.status(404).json({ success: false, error: { message: 'Job not found' } });
     }
 
-    const results = await Result.find({ 
-      jobId, 
-      status: { $in: ['shortlisted', 'interview', 'offer'] }
-    })
-      .populate('applicantId', 'name email phone skills experience education')
+    const results = await Result.find({ jobId })
+      .populate('jobId', 'title')
       .sort({ score: -1, ranking: 1 });
 
-    const shortlisted = results.map(r => ({
-      _id: r._id,
-      applicantId: r.applicantId?._id,
-      name: (r.applicantId as any)?.name,
-      email: (r.applicantId as any)?.email,
-      skills: (r.applicantId as any)?.skills,
-      score: r.score,
-      ranking: r.ranking,
-      status: r.status,
-      matchDetails: r.matchDetails,
-      strengths: r.strengths,
-      gaps: r.gaps,
-      reasoning: r.reasoning,
-      recommendation: r.score >= 80 ? 'Strong Hire' : r.score >= 60 ? 'Consider' : 'Borderline',
-      createdAt: r.createdAt
-    }));
+    const shortlistedCandidates: any[] = [];
+    const nonShortlistedCandidates: any[] = [];
+
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i];
+      const applicantInfo = await getApplicantInfo(r.applicantId as mongoose.Types.ObjectId);
+
+      const candidateData = {
+        _id: r._id,
+        applicantId: r.applicantId,
+        applicantName: applicantInfo?.name || 'Unknown',
+        applicantEmail: applicantInfo?.email || '',
+        applicantSkills: (applicantInfo?.skills || []).map((s: any) => s.name || s),
+        jobId: r.jobId,
+        jobTitle: job.title,
+        score: r.score,
+        ranking: i + 1,
+        status: r.status,
+        strengths: r.strengths,
+        gaps: r.gaps,
+        reasoning: r.reasoning,
+        matchDetails: r.matchDetails,
+        recommendation: r.score >= 80 ? 'Strong Hire' : r.score >= 60 ? 'Consider' : 'Borderline',
+        createdAt: r.createdAt
+      };
+
+      if (['shortlisted', 'interview', 'offer'].includes(r.status)) {
+        shortlistedCandidates.push(candidateData);
+      } else {
+        nonShortlistedCandidates.push(candidateData);
+      }
+    }
+
+    const allCandidates = [...shortlistedCandidates, ...nonShortlistedCandidates];
+    const scores = results.map(r => r.score);
 
     res.json({
       success: true,
       data: {
         job: { _id: job._id, title: job.title },
-        shortlisted,
-        total: shortlisted.length
+        shortlisted: shortlistedCandidates,
+        nonShortlisted: nonShortlistedCandidates,
+        allCandidates,
+        total: allCandidates.length,
+        statistics: {
+          highestScore: scores.length > 0 ? Math.max(...scores) : 0,
+          lowestScore: scores.length > 0 ? Math.min(...scores) : 0,
+          averageScore: scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0,
+          total: allCandidates.length,
+          shortlistedCount: shortlistedCandidates.length,
+          nonShortlistedCount: nonShortlistedCandidates.length
+        }
       }
     });
-  } catch (error) {
-    res.status(500).json({ success: false, error: { message: 'Server error' } });
+  } catch (error: any) {
+    const errorMessage = error?.message || '';
+    if (errorMessage.includes('429') || errorMessage.includes('rate limit') || errorMessage.includes('Too many requests') || errorMessage.includes('quota')) {
+      res.status(429).json({ 
+        success: false, 
+        error: { message: 'Model is busy due to high demand. Please try again in a few moments.' } 
+      });
+    } else {
+      res.status(500).json({ success: false, error: { message: 'Server error. Please try again.' } });
+    }
   }
 });
 

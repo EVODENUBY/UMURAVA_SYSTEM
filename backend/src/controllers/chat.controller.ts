@@ -3,6 +3,8 @@ import { body, validationResult } from 'express-validator';
 import mongoose from 'mongoose';
 import Job from '../models/job.model';
 import Applicant from '../models/applicant.model';
+import ExternalApplicant from '../models/externalApplicant.model';
+import InternalApplicant from '../models/internalApplicant.model';
 import Result from '../models/result.model';
 import Chat from '../models/chat.model';
 import Message from '../models/message.model';
@@ -50,6 +52,27 @@ class ChatController {
         return next(createError('Job not found', 404));
       }
       chatContext.job = job;
+
+      // Auto-fetch top candidates and results for the job
+      const results = await Result.find({ jobId })
+        .sort({ score: -1 })
+        .limit(20)
+        .populate('applicantId', 'name email skills experience education');
+
+      if (results.length > 0) {
+        chatContext.results = results.map(r => ({
+          candidateId: (r.applicantId as any)?._id?.toString() || '',
+          candidateName: (r.applicantId as any)?.name || 'Unknown',
+          score: r.score,
+          strengths: r.strengths || [],
+          gaps: r.gaps || [],
+          reasoning: r.reasoning,
+          matchDetails: r.matchDetails,
+          ranking: r.ranking,
+          status: r.status
+        }));
+        chatContext.candidates = results.map(r => r.applicantId as any);
+      }
     }
 
     // Fetch candidate details if provided
@@ -176,7 +199,21 @@ Provide a specific recommendation with clear reasoning.`;
       return next(createError('Job not found', 404));
     }
 
-    const applicant = await Applicant.findById(applicantId);
+    // Try ExternalApplicant first, then InternalApplicant
+    let applicant: any = await ExternalApplicant.findById(applicantId);
+    if (!applicant) {
+      const internalApp = await InternalApplicant.findById(applicantId)
+        .populate('userId', 'firstName lastName email');
+      if (internalApp) {
+        applicant = {
+          name: `${(internalApp as any).userId?.firstName || ''} ${(internalApp as any).userId?.lastName || ''}`.trim() || 'Unknown',
+          email: (internalApp as any).userId?.email || '',
+          skills: [],
+          experience: { years: 0 }
+        };
+      }
+    }
+
     if (!applicant) {
       return next(createError('Applicant not found', 404));
     }
@@ -186,18 +223,20 @@ Provide a specific recommendation with clear reasoning.`;
       return next(createError('Screening result not found', 404));
     }
 
+    const applicantName = applicant.name || 'Unknown Candidate';
+
     const explainPrompt = `Explain the AI screening decision for this candidate in simple terms that a non-technical recruiter can understand.
 
 Job: ${job.title}
-Candidate: ${applicant.name}
+Candidate: ${applicantName}
 Score: ${result.score}/100
 
 Skills Match: ${result.matchDetails.skillsMatch}%
 Experience Match: ${result.matchDetails.experienceMatch}%
 Education Match: ${result.matchDetails.educationMatch}%
 
-Strengths: ${result.strengths.join(', ')}
-Gaps: ${result.gaps.join(', ')}
+Strengths: ${result.strengths?.join(', ') || 'None identified'}
+Gaps: ${result.gaps?.join(', ') || 'No significant gaps'}
 
 Original Reasoning: ${result.reasoning}
 
@@ -210,7 +249,7 @@ Provide a clear, conversational explanation covering:
 
     const explanation = await aiService.generateChatResponse(explainPrompt, {
       job,
-      candidates: [applicant]
+      candidates: [{ name: applicantName, email: applicant.email, skills: applicant.skills || [], experience: applicant.experience }]
     });
 
     res.status(200).json({
@@ -219,7 +258,7 @@ Provide a clear, conversational explanation covering:
         jobId,
         jobTitle: job.title,
         applicantId,
-        applicantName: applicant.name,
+        applicantName,
         score: result.score,
         explanation,
         reasoning: result.reasoning
@@ -288,7 +327,26 @@ Provide specific, actionable suggestions.`;
       return next(createError('Job not found', 404));
     }
 
-    const applicant = await Applicant.findById(applicantId);
+    // Try ExternalApplicant first, then InternalApplicant
+    let applicant: any = await ExternalApplicant.findById(applicantId);
+    let applicantName = 'Unknown Candidate';
+
+    if (!applicant) {
+      const internalApp = await InternalApplicant.findById(applicantId)
+        .populate('userId', 'firstName lastName email');
+      if (internalApp) {
+        applicantName = `${(internalApp as any).userId?.firstName || ''} ${(internalApp as any).userId?.lastName || ''}`.trim() || 'Unknown';
+        applicant = {
+          name: applicantName,
+          email: (internalApp as any).userId?.email || '',
+          skills: [],
+          experience: { years: 0, currentRole: '' }
+        };
+      }
+    } else {
+      applicantName = applicant.name || 'Unknown';
+    }
+
     if (!applicant) {
       return next(createError('Applicant not found', 404));
     }
@@ -300,14 +358,14 @@ Provide specific, actionable suggestions.`;
 Job: ${job.title}
 Required Skills: ${job.requiredSkills.join(', ')}
 
-Candidate: ${applicant.name}
-Skills: ${applicant.skills.join(', ')}
-Experience: ${applicant.experience.years} years${applicant.experience.currentRole ? `, Current: ${applicant.experience.currentRole}` : ''}
+Candidate: ${applicantName}
+Skills: ${applicant.skills?.join(', ') || 'Not specified'}
+Experience: ${applicant.experience?.years || 0} years${applicant.experience?.currentRole ? `, Current: ${applicant.experience.currentRole}` : ''}
 
 ${result ? `
 Screening Score: ${result.score}/100
-Strengths: ${result.strengths.join(', ')}
-Gaps: ${result.gaps.join(', ')}
+Strengths: ${result.strengths?.join(', ') || 'None'}
+Gaps: ${result.gaps?.join(', ') || 'None'}
 ` : ''}
 
 Provide:
@@ -318,7 +376,7 @@ Provide:
 
     const questions = await aiService.generateChatResponse(questionsPrompt, {
       job,
-      candidates: [applicant]
+      candidates: [{ name: applicantName, skills: applicant.skills || [], experience: applicant.experience }]
     });
 
     res.status(200).json({
@@ -327,7 +385,7 @@ Provide:
         jobId,
         jobTitle: job.title,
         applicantId,
-        applicantName: applicant.name,
+        applicantName,
         suggestedQuestions: questions
       }
     });

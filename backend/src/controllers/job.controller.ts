@@ -205,6 +205,10 @@ class JobController {
 
     const updateFields: Record<string, unknown> = { ...updateData };
     
+    if (status) {
+      updateFields.status = status;
+    }
+
     if (status === 'published' && existingJob.status !== 'published') {
       updateFields.postedDate = new Date();
     }

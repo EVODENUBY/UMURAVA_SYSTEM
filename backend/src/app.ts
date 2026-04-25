@@ -23,6 +23,7 @@ import shortlistRoutes from './routes/shortlist.routes';
 import adminRoutes from './routes/admin.routes';
 import systemRoutes from './routes/system.routes';
 import testRoutes from './routes/test.routes';
+import seedRoutes from './routes/seed.routes';
 
 //  middleware
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware';
@@ -429,6 +430,7 @@ app.use('/api/shortlist', shortlistRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/system', systemRoutes);
 app.use('/api/test', testRoutes);
+app.use('/api/seed', seedRoutes);
 
 // Serve test.html as static file
 app.get('/test', (_req, res) => {

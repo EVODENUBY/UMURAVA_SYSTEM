@@ -30,14 +30,23 @@ const router = Router();
  *               jobId:
  *                 type: string
  *                 example: "507f1f77bcf86cd799439011"
-*               threshold:
-  *                 type: number
-  *                 default: 0
+ *               threshold:
+ *                 type: number
+ *                 default: 0
  *                 description: Minimum score threshold
  *               autoShortlist:
  *                 type: boolean
  *                 default: true
  *                 description: Automatically shortlist high-scoring candidates
+ *               shortlistThreshold:
+ *                 type: number
+ *                 default: 75
+ *                 description: Score threshold for shortlisting
+ *               screeningMode:
+ *                 type: string
+ *                 enum: [standard, best, advanced]
+ *                 default: standard
+ *                 description: Screening mode - standard (default), best (finds best candidate), advanced (detailed evaluation)
  *     responses:
  *       200:
  *         description: Screening completed successfully
@@ -55,10 +64,23 @@ const router = Router();
  *                       type: string
  *                     jobTitle:
  *                       type: string
+ *                     screeningMode:
+ *                       type: string
  *                     summary:
  *                       type: string
  *                     topCandidates:
  *                       type: array
+ *                     bestCandidates:
+ *                       type: object
+ *                       properties:
+ *                         bestOverall:
+ *                           type: object
+ *                         bestSkills:
+ *                           type: object
+ *                         bestExperience:
+ *                           type: object
+ *                         bestEducation:
+ *                           type: object
  *                     biasAlerts:
  *                       type: array
  *                     statistics:

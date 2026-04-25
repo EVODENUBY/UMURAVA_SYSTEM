@@ -4,7 +4,7 @@ export interface IInternalApplicant extends Document {
   userId: Types.ObjectId;
   talentProfileId: Types.ObjectId;
   jobId?: Types.ObjectId;
-  status: 'applied' | 'screening' | 'interview' | 'offer' | 'hired' | 'rejected';
+  status: 'pending' | 'applied' | 'screening' | 'shortlisted' | 'interview' | 'offer' | 'hired' | 'rejected';
   resumeText?: string;
   resumeFilePath?: string;
   resumeLink?: string;

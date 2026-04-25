@@ -160,10 +160,27 @@ export class AIService {
         biasAlerts,
         summary: parsedOutput.summary
       };
-    } catch (error) {
-      logger.error('Error in AI screening:', error);
-      throw new Error(`AI screening failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+} catch (error) {
+        logger.error('Error in AI screening:', error);
+        const fallbackEvaluations: EvaluationResult[] = applicants.map(applicant => ({
+          candidateId: String(applicant._id),
+          score: 0,
+          strengths: [],
+          gaps: ['AI screening failed'],
+          reasoning: 'AI screening service encountered an error. Please try again.',
+          matchDetails: {
+            skillsMatch: 0,
+            experienceMatch: 0,
+            educationMatch: 0,
+            overallMatch: 0
+          }
+        }));
+       return {
+         evaluations: fallbackEvaluations,
+         biasAlerts: [],
+         summary: 'AI screening failed. Using fallback evaluation.'
+       };
+     }
   }
 
   /**

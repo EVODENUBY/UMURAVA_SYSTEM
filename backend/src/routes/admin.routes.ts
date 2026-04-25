@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { protect, authorize } from '../middlewares/auth.middleware';
 import User, { UserRole } from '../models/user.model';
 import Job from '../models/job.model';
+import InternalApplicant from '../models/internalApplicant.model';
+import ExternalApplicant from '../models/externalApplicant.model';
 
 const router = Router();
 
@@ -21,6 +23,14 @@ const router = Router();
  */
 router.get('/dashboard', protect, authorize('admin'), async (_req: Request, res: Response) => {
   try {
+    // Query directly from mongoose connection to ensure correct collection
+    const mongoose = require('mongoose');
+    const totalInternalApplicants = await mongoose.connection.collection('internalapplicants').countDocuments();
+    const totalExternalApplicants = await mongoose.connection.collection('externalapplicants').countDocuments();
+
+    console.log('[Admin Dashboard] internalapplicants count:', totalInternalApplicants);
+    console.log('[Admin Dashboard] externalapplicants count:', totalExternalApplicants);
+
     const [
       totalUsers,
       totalRecruiters,
@@ -41,7 +51,6 @@ router.get('/dashboard', protect, authorize('admin'), async (_req: Request, res:
       Job.find({}).sort({ createdAt: -1 }).limit(5).select('title status createdAt createdBy').populate('createdBy', 'firstName lastName email').lean()
     ]);
 
-    // Type assertion for populated fields
     const jobsWithRecruiter = recentJobs.map((j: any) => ({
       id: j._id,
       title: j.title,
@@ -59,13 +68,15 @@ router.get('/dashboard', protect, authorize('admin'), async (_req: Request, res:
         totalJobs,
         activeJobs,
         pendingScreenings: pendingScreenings,
-        recentUsers: recentUsers.map((u: any) => ({ 
-          id: u._id, 
-          fullName: `${u.firstName || ''} ${u.lastName || ''}`.trim(), 
-          email: u.email, 
-          role: u.role, 
-          createdAt: u.createdAt, 
-          isActive: u.isActive 
+        totalInternalApplicants,
+        totalExternalApplicants,
+        recentUsers: recentUsers.map((u: any) => ({
+          id: u._id,
+          fullName: `${u.firstName || ''} ${u.lastName || ''}`.trim(),
+          email: u.email,
+          role: u.role,
+          createdAt: u.createdAt,
+          isActive: u.isActive
         })),
         recentJobs: jobsWithRecruiter,
         recentActivity: {
@@ -187,8 +198,64 @@ router.post('/create-user', protect, authorize('admin'), async (req: Request, re
  */
 router.get('/users', protect, authorize('admin'), async (req: Request, res: Response) => {
   try {
-    const { page = 1, limit = 20, role, search } = req.query;
-    
+    const { page = 1, limit = 20, role, search, applicantSource } = req.query;
+
+    // Handle applicant filtering by source (internal/external)
+    if (role === 'applicant' && applicantSource) {
+      const effectiveLimit = Number(limit) || 50;
+      const skip = (Number(page) - 1) * effectiveLimit;
+      let applicants: any[] = [];
+      let total = 0;
+
+      if (applicantSource === 'internal') {
+        total = await InternalApplicant.countDocuments();
+        applicants = await InternalApplicant.find()
+          .populate('userId', 'firstName lastName email createdAt isActive')
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(effectiveLimit);
+      } else if (applicantSource === 'external') {
+        total = await ExternalApplicant.countDocuments();
+        applicants = await ExternalApplicant.find()
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(effectiveLimit);
+      }
+
+      const users = applicants.map((a: any) => {
+        if (applicantSource === 'internal' && a.userId) {
+          return {
+            _id: a.userId._id,
+            fullName: `${a.userId.firstName || ''} ${a.userId.lastName || ''}`.trim(),
+            email: a.userId.email,
+            role: 'applicant',
+            isActive: a.userId.isActive,
+            createdAt: a.userId.createdAt,
+            applicantSource: 'internal',
+            applicantId: a._id
+          };
+        }
+        return {
+          _id: a._id,
+          fullName: a.name || 'Unknown',
+          email: a.email || '',
+          role: 'applicant',
+          isActive: true,
+          createdAt: a.createdAt,
+          applicantSource: 'external',
+          applicantId: a._id
+        };
+      });
+
+      return res.json({
+        success: true,
+        data: {
+          users,
+          pagination: { page: Number(page), limit: effectiveLimit, total, pages: Math.ceil(total / effectiveLimit) || 1 }
+        }
+      });
+    }
+
     const query: any = {};
     if (role) query.role = role;
     if (search) {

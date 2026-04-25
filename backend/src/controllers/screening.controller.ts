@@ -13,7 +13,8 @@ import logger from '../utils/logger';
 // Validation rules
 export const screeningValidation = [
   body('jobId').notEmpty().withMessage('Job ID is required'),
-  body('threshold').optional().isInt({ min: 0, max: 100 }).withMessage('Threshold must be between 0 and 100')
+  body('threshold').optional().isInt({ min: 0, max: 100 }).withMessage('Threshold must be between 0 and 100'),
+  body('shortlistThreshold').optional().isInt({ min: 0, max: 100 }).withMessage('Shortlist threshold must be between 0 and 100')
 ];
 
 class ScreeningController {
@@ -21,15 +22,20 @@ class ScreeningController {
    * Run AI screening for a job
    */
   runScreening = asyncHandler(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    // Check validation errors
+// Check validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return next(createError(errors.array()[0].msg, 400));
     }
 
-    const { jobId, threshold = 0, autoShortlist = true } = req.body;
+     const { jobId, threshold = 0, autoShortlist = true, shortlistThreshold = 75, screeningMode = 'standard' } = req.body;
 
-    logger.info('Starting screening process', { jobId });
+    logger.info('Starting screening process', { jobId, screeningMode });
+
+    const validModes = ['standard', 'best', 'advanced'];
+    if (!validModes.includes(screeningMode)) {
+      return next(createError(`Invalid screening mode. Must be one of: ${validModes.join(', ')}`, 400));
+    }
 
     // Get job details
     const job = await Job.findById(jobId);
@@ -44,34 +50,46 @@ class ScreeningController {
     ]);
 
     // Convert to Applicant format for screening
+    // First, populate internal applicant user data and talent profile
+    const populatedInternal = await Promise.all(
+      internalApplicants.map(async (int) => {
+        const populated = await InternalApplicant.findById(int._id)
+          .populate('userId', 'firstName lastName email')
+          .populate('talentProfileId', 'skills experience education');
+        const user = (populated as any)?.userId;
+        const talentProfile = (populated as any)?.talentProfileId;
+        return {
+          _id: int._id,
+          name: user ? `${user.firstName} ${user.lastName || ''}`.trim() : 'Unknown Candidate',
+          email: user?.email || 'unknown@example.com',
+          phone: '',
+          skills: talentProfile?.skills?.map((s: any) => s.name || s) || [],
+          experience: talentProfile?.experience || { years: 0 },
+          education: talentProfile?.education || [],
+          resumeText: int.resumeText || '',
+          resumeFilePath: int.resumeFilePath,
+          source: 'internal' as const
+        };
+      })
+    );
+
     const combinedApplicants = [
       ...externalApplicants.map(ext => ({
         _id: ext._id,
-        name: ext.name,
-        email: ext.email,
-        phone: ext.phone,
-        skills: ext.skills,
-        experience: ext.experience,
-        education: ext.education,
-        resumeText: ext.resumeText,
-          resumeFilePath: ext.resumeFilePath,
-          source: ext.source
-        })),
-        ...internalApplicants.map(int => ({
-          _id: int._id,
-          name: 'Internal Applicant',
-          email: 'internal@example.com',
-          phone: int.userId?.toString(),
-          skills: [],
-          experience: { years: 0 },
-          education: [],
-          resumeText: int.resumeText || '',
-          resumeFilePath: int.resumeFilePath,
-          source: 'manual' as const
-        }))
-      ];
+        name: ext.name || 'Unknown Candidate',
+        email: ext.email || 'unknown@example.com',
+        phone: ext.phone || '',
+        skills: ext.skills || [],
+        experience: ext.experience || { years: 0 },
+        education: ext.education || [],
+        resumeText: ext.resumeText || '',
+        resumeFilePath: ext.resumeFilePath,
+        source: ext.source || 'external'
+      })),
+      ...populatedInternal
+    ];
 
-      logger.info(`Found ${externalApplicants.length} external + ${internalApplicants.length} internal applicants for job ${jobId}`);
+    logger.info(`Found ${externalApplicants.length} external + ${internalApplicants.length} internal applicants for job ${jobId}`);
 
     if (combinedApplicants.length === 0) {
       return next(createError('No applicants found for this job', 400));
@@ -79,18 +97,28 @@ class ScreeningController {
 
     logger.info(`Screening ${combinedApplicants.length} applicants for job ${jobId}`);
 
-    // Run AI screening (cast to any to avoid type issues with combined format)
-    const screeningResult = await aiService.screenCandidates(job, combinedApplicants as any);
-
-    // Rank candidates
-    const rankedCandidates = scoringService.rankCandidates(
-      screeningResult.evaluations,
-      {
-        threshold,
-        autoShortlist,
-        shortlistThreshold: 75
+// Run AI screening (cast to any to avoid type issues with combined format)
+      let screeningResult;
+      try {
+        screeningResult = await aiService.screenCandidates(job, combinedApplicants as any);
+      } catch (error: any) {
+        logger.error('AI screening failed:', error);
+        const errorMessage = error?.message || '';
+        if (errorMessage.includes('429') || errorMessage.includes('rate limit') || errorMessage.includes('Too many requests') || errorMessage.includes('quota') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+          return next(createError('Model is busy due to high demand. Please try again in a few moments.', 429));
+        }
+        return next(createError(`AI screening failed: ${errorMessage || 'Unknown error. Please try again.'}`, 500));
       }
-    );
+
+     // Rank candidates
+     const rankedCandidates = scoringService.rankCandidates(
+       screeningResult.evaluations,
+       {
+         threshold,
+         autoShortlist,
+         shortlistThreshold
+       }
+     );
 
     // Save results to database
     const savedResults = await scoringService.saveResults(
@@ -193,15 +221,20 @@ class ScreeningController {
 
     logger.info('Screening completed successfully', { 
       jobId,
+      screeningMode,
       evaluated: rankedCandidates.length,
       saved: savedResults.length
     });
+
+    // Get best candidates comparison
+    const comparison = scoringService.compareCandidates(screeningResult.evaluations);
 
     res.status(200).json({
       success: true,
       data: {
         jobId,
         jobTitle: job.title,
+        screeningMode,
         summary: screeningResult.summary,
         topCandidates,
         allRankings: allRankingsWithDetails,
@@ -214,6 +247,31 @@ class ScreeningController {
         totalEvaluated: rankedCandidates.length,
         biasAlerts: screeningResult.biasAlerts,
         biasAlertCount: screeningResult.biasAlerts.length,
+        bestCandidates: {
+          bestOverall: comparison.bestOverall ? {
+            candidateId: comparison.bestOverall.candidateId,
+            score: comparison.bestOverall.score,
+            name: combinedApplicants.find(a => String(a._id) === String(comparison.bestOverall?.candidateId))?.name || 'Unknown'
+          } : null,
+          bestSkills: comparison.bestSkills ? {
+            candidateId: comparison.bestSkills.candidateId,
+            score: comparison.bestSkills.score,
+            name: combinedApplicants.find(a => String(a._id) === String(comparison.bestSkills?.candidateId))?.name || 'Unknown',
+            matchScore: comparison.bestSkills.matchDetails.skillsMatch
+          } : null,
+          bestExperience: comparison.bestExperience ? {
+            candidateId: comparison.bestExperience.candidateId,
+            score: comparison.bestExperience.score,
+            name: combinedApplicants.find(a => String(a._id) === String(comparison.bestExperience?.candidateId))?.name || 'Unknown',
+            matchScore: comparison.bestExperience.matchDetails.experienceMatch
+          } : null,
+          bestEducation: comparison.bestEducation ? {
+            candidateId: comparison.bestEducation.candidateId,
+            score: comparison.bestEducation.score,
+            name: combinedApplicants.find(a => String(a._id) === String(comparison.bestEducation?.candidateId))?.name || 'Unknown',
+            matchScore: comparison.bestEducation.matchDetails.educationMatch
+          } : null
+        },
         statistics: {
           averageScore: Math.round(
             rankedCandidates.reduce((sum, c) => sum + c.score, 0) / rankedCandidates.length
@@ -256,23 +314,75 @@ class ScreeningController {
         .sort({ score: -1 })
         .skip(skip)
         .limit(limit)
-        .populate('applicantId', 'name email skills experience education')
         .exec(),
       Result.countDocuments(query)
     ]);
+
+    // Process results to get proper candidate names (check both ExternalApplicant and InternalApplicant)
+    const processedResults = await Promise.all(
+      results.map(async (r) => {
+        let name = 'Unknown';
+        let email = '';
+        let skills = [];
+        let experience = null;
+        let education = [];
+
+        // Try ExternalApplicant first
+        const externalApp = await ExternalApplicant.findById(r.applicantId)
+          .select('name email skills experience education');
+
+        if (externalApp) {
+          name = externalApp.name || 'Unknown';
+          email = externalApp.email || '';
+          skills = externalApp.skills || [];
+          experience = externalApp.experience;
+          education = externalApp.education || [];
+        } else {
+          // Try InternalApplicant with user population
+          const internalApp = await InternalApplicant.findById(r.applicantId)
+            .populate('userId', 'firstName lastName email')
+            .populate('talentProfileId', 'skills experience education');
+
+          if (internalApp) {
+            const user = (internalApp as any).userId;
+            const talentProfile = (internalApp as any).talentProfileId;
+            name = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Unknown' : 'Unknown';
+            email = user?.email || '';
+            skills = talentProfile?.skills?.map((s: any) => s.name || s) || [];
+            experience = talentProfile?.experience;
+            education = talentProfile?.education || [];
+          }
+        }
+
+        return {
+          _id: r._id,
+          applicantId: {
+            _id: r.applicantId,
+            name,
+            email,
+            skills,
+            experience,
+            education
+          },
+          score: r.score,
+          ranking: r.ranking,
+          status: r.status,
+          strengths: r.strengths,
+          gaps: r.gaps,
+          reasoning: r.reasoning,
+          matchDetails: r.matchDetails
+        };
+      })
+    );
 
     res.status(200).json({
       success: true,
       data: {
         jobId,
         jobTitle: job.title,
-        results,
-        pagination: {
-          page,
-          limit,
-          total,
-          pages: Math.ceil(total / limit)
-        }
+        results: processedResults,
+        total,
+        pages: Math.ceil(total / limit)
       }
     });
   });
