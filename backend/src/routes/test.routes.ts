@@ -1,12 +1,7 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import Job from '../models/job.model';
 import ExternalApplicant from '../models/externalApplicant.model';
 import InternalApplicant from '../models/internalApplicant.model';
-import Applicant from '../models/applicant.model';
-import aiService from '../services/ai.service';
-import scoringService from '../services/scoring.service';
-import { protect, authorize } from '../middlewares/auth.middleware';
-import logger from '../utils/logger';
 
 const router = Router();
 
