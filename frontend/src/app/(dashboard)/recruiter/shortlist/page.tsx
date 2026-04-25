@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/contexts/ToastContext';
 import { api, ENDPOINTS } from '@/lib/api';
-import { FaUser, FaStar, FaCheck, FaTimes, FaEnvelope, FaPhone } from 'react-icons/fa';
-import { SkeletonCard } from '@/components/ui/Skeleton';
+import { FaUser, FaStar, FaCheck, FaTimes, FaEnvelope, FaSearch, FaFilter, FaChartBar, FaSortAmountDown } from 'react-icons/fa';
+import { SkeletonTable } from '@/components/ui/Skeleton';
 
 interface Job {
   _id: string;
@@ -25,30 +26,43 @@ interface ShortlistedCandidate {
   strengths: string[];
   gaps: string[];
   reasoning: string;
+  matchDetails?: {
+    skillsMatch?: number;
+    experienceMatch?: number;
+    educationMatch?: number;
+    overallMatch?: number;
+  };
+  recommendation?: string;
+  createdAt?: string;
+}
+
+interface Statistics {
+  highestScore: number;
+  lowestScore: number;
+  averageScore: number;
+  total: number;
+  shortlistedCount?: number;
+  nonShortlistedCount?: number;
 }
 
 export default function ShortlistPage() {
   const { token } = useAuth();
+  const { showToast } = useToast();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [selectedJob, setSelectedJob] = useState<string>('');
-  const [candidates, setCandidates] = useState<ShortlistedCandidate[]>([]);
+  const [allCandidates, setAllCandidates] = useState<ShortlistedCandidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCandidate, setSelectedCandidate] = useState<ShortlistedCandidate | null>(null);
   const [compareMode, setCompareMode] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<'shortlisted' | 'nonShortlisted' | 'all'>('shortlisted');
+  const [statistics, setStatistics] = useState<Statistics | null>(null);
+  
+  const [searchQuery, setSearchQuery] = useState('');
+  const [scoreFilter, setScoreFilter] = useState<string>('all');
+  const [skillFilter, setSkillFilter] = useState<string>('');
+  const [sortBy, setSortBy] = useState<'score' | 'name' | 'ranking'>('score');
 
-  useEffect(() => {
-    fetchJobs();
-  }, [token]);
-
-  useEffect(() => {
-    if (selectedJob) {
-      fetchShortlist();
-    } else {
-      fetchAllShortlisted();
-    }
-  }, [selectedJob]);
-
-  const fetchJobs = async () => {
+  const fetchJobs = async (): Promise<void> => {
     try {
       const response = await api.get<{ success: boolean; data: { jobs: Job[] } }>(ENDPOINTS.JOBS.ALL, token || undefined);
       if (response.success) {
@@ -59,42 +73,99 @@ export default function ShortlistPage() {
     }
   };
 
-  const fetchShortlist = async () => {
-    if (!selectedJob) return;
+  const fetchResults = async () => {
     setLoading(true);
     try {
-      const data = await api.get<{ success: boolean; data: { shortlisted: ShortlistedCandidate[] } }>(
-        ENDPOINTS.SHORTLIST.JOB(selectedJob),
-        token || undefined
-      );
-      if (data.success) {
-        setCandidates(data.data.shortlisted);
-      }
-    } catch (error) {
-      console.error('Failed to fetch shortlist:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchAllShortlisted = async () => {
-    setLoading(true);
-    try {
-      const response = await api.get<{ success: boolean; data: ShortlistedCandidate[] }>(
-        '/shortlist',
-        token || undefined
-      );
+      let endpoint = selectedJob 
+        ? ENDPOINTS.SHORTLIST.JOB(selectedJob)
+        : ENDPOINTS.SHORTLIST.LIST;
+      
+      const response = await api.get<{ 
+        success: boolean; 
+        data: any; 
+        statistics?: Statistics;
+      }>(endpoint, token || undefined);
+      
       if (response.success) {
-        setCandidates(response.data);
+        const candidates = response.data.allCandidates || response.data || [];
+        setAllCandidates(candidates);
+        
+        if (response.data.statistics) {
+          setStatistics(response.data.statistics);
+        } else if (response.statistics) {
+          setStatistics(response.statistics);
+        } else {
+          const scores = candidates.map((c: any) => c.score);
+          setStatistics({
+            highestScore: scores.length > 0 ? Math.max(...scores) : 0,
+            lowestScore: scores.length > 0 ? Math.min(...scores) : 0,
+            averageScore: scores.length > 0 ? Math.round(scores.reduce((a: number, b: number) => a + b, 0) / scores.length) : 0,
+            total: candidates.length
+          });
+        }
       }
-    } catch (error) {
-      console.error('Failed to fetch shortlist:', error);
+    } catch (error: any) {
+      console.error('Failed to fetch results:', error);
+      showToast(error?.response?.data?.error?.message || 'Failed to fetch results', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const toggleCompare = (id: string) => {
+  useEffect(() => {
+    fetchJobs();
+  }, [token]);
+
+  useEffect(() => {
+    fetchResults();
+  }, [selectedJob]);
+
+  const filteredCandidates = useMemo(() => {
+    let filtered = [...allCandidates];
+    
+    if (viewMode === 'shortlisted') {
+      filtered = filtered.filter(c => ['shortlisted', 'interview', 'offer'].includes(c.status));
+    } else if (viewMode === 'nonShortlisted') {
+      filtered = filtered.filter(c => ['pending', 'rejected'].includes(c.status));
+    }
+    
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(c => 
+        c.applicantName.toLowerCase().includes(query) ||
+        c.applicantEmail.toLowerCase().includes(query) ||
+        c.applicantSkills?.some(s => s.toLowerCase().includes(query))
+      );
+    }
+    
+    if (scoreFilter !== 'all') {
+      const [min, max] = scoreFilter.split('-').map(Number);
+      filtered = filtered.filter(c => c.score >= min && c.score <= max);
+    }
+    
+    if (skillFilter) {
+      const query = skillFilter.toLowerCase();
+      filtered = filtered.filter(c => 
+        c.applicantSkills?.some(s => s.toLowerCase().includes(query))
+      );
+    }
+    
+    switch (sortBy) {
+      case 'score':
+        filtered.sort((a, b) => b.score - a.score);
+        break;
+      case 'name':
+        filtered.sort((a, b) => a.applicantName.localeCompare(b.applicantName));
+        break;
+      case 'ranking':
+        filtered.sort((a, b) => a.ranking - b.ranking);
+        break;
+    }
+    
+    return filtered;
+  }, [allCandidates, viewMode, searchQuery, scoreFilter, skillFilter, sortBy]);
+
+  const toggleCompare = (id: string): void => {
     if (compareMode.includes(id)) {
       setCompareMode(compareMode.filter(c => c !== id));
     } else if (compareMode.length < 4) {
@@ -102,115 +173,306 @@ export default function ShortlistPage() {
     }
   };
 
+  const getScoreColor = (score: number) => {
+    if (score >= 80) return 'bg-green-100 text-green-700';
+    if (score >= 60) return 'bg-blue-100 text-blue-700';
+    if (score >= 40) return 'bg-yellow-100 text-yellow-700';
+    return 'bg-red-100 text-red-700';
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'shortlisted':
+        return 'bg-green-100 text-green-700';
+      case 'interview':
+        return 'bg-purple-100 text-purple-700';
+      case 'offer':
+        return 'bg-teal-100 text-teal-700';
+      case 'rejected':
+        return 'bg-red-100 text-red-700';
+      default:
+        return 'bg-yellow-100 text-yellow-700';
+    }
+  };
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setScoreFilter('all');
+    setSkillFilter('');
+    setSortBy('score');
+  };
+
+  const handleCompare = async () => {
+    if (compareMode.length < 2) {
+      showToast('Select at least 2 candidates to compare', 'warning');
+      return;
+    }
+    try {
+      const response = await api.post<{ success: boolean; data: any[] }>(
+        ENDPOINTS.SHORTLIST.COMPARE,
+        { applicantIds: compareMode, jobId: selectedJob || undefined },
+        token || undefined
+      );
+      if (response.success) {
+        showToast('Compare functionality ready', 'success');
+      }
+    } catch (error) {
+      showToast('Failed to compare candidates', 'error');
+    }
+  };
+
   return (
-    <div className="p-4 sm:p-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 sm:mb-6">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900">Shortlisted Candidates</h1>
-          <p className="text-sm sm:text-base text-slate-500">Top candidates from AI screening</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900">Candidates</h1>
+          <p className="text-sm sm:text-base text-slate-500">View and manage shortlisted candidates</p>
         </div>
-        <select
-          value={selectedJob}
-          onChange={(e) => setSelectedJob(e.target.value)}
-          className="px-3 sm:px-4 py-2 border border-slate-200 rounded-lg text-sm sm:text-base w-full sm:w-auto"
-        >
-          <option value="">All Jobs</option>
-          {jobs.map(job => (
-            <option key={job._id} value={job._id}>{job.title}</option>
-          ))}
-        </select>
+      </div>
+
+      {statistics && !loading && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-4 sm:p-5 text-white">
+            <div className="flex items-center gap-2 mb-2">
+              <FaChartBar className="text-blue-100" />
+              <span className="text-xs sm:text-sm text-blue-100">Total</span>
+            </div>
+            <p className="text-2xl sm:text-3xl font-bold">{statistics.total}</p>
+            <p className="text-xs text-blue-100 mt-1">Candidates</p>
+          </div>
+          <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-4 sm:p-5 text-white">
+            <div className="flex items-center gap-2 mb-2">
+              <FaStar className="text-green-100" />
+              <span className="text-xs sm:text-sm text-green-100">Highest</span>
+            </div>
+            <p className="text-2xl sm:text-3xl font-bold">{statistics.highestScore}%</p>
+            <p className="text-xs text-green-100 mt-1">Top Score</p>
+          </div>
+          <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-4 sm:p-5 text-white">
+            <div className="flex items-center gap-2 mb-2">
+              <FaStar className="text-orange-100" />
+              <span className="text-xs sm:text-sm text-orange-100">Lowest</span>
+            </div>
+            <p className="text-2xl sm:text-3xl font-bold">{statistics.lowestScore}%</p>
+            <p className="text-xs text-orange-100 mt-1">Min Score</p>
+          </div>
+          <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-4 sm:p-5 text-white">
+            <div className="flex items-center gap-2 mb-2">
+              <FaChartBar className="text-purple-100" />
+              <span className="text-xs sm:text-sm text-purple-100">Average</span>
+            </div>
+            <p className="text-2xl sm:text-3xl font-bold">{statistics.averageScore}%</p>
+            <p className="text-xs text-purple-100 mt-1">Avg Score</p>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-3 sm:p-4">
+        <div className="flex flex-col lg:flex-row gap-3">
+          <div className="flex-1">
+            <div className="relative">
+              <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by name, email, or skills..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+          <select
+            value={selectedJob}
+            onChange={(e) => setSelectedJob(e.target.value)}
+            className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">All Jobs</option>
+            {jobs.map(job => (
+              <option key={job._id} value={job._id}>{job.title}</option>
+            ))}
+          </select>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setViewMode('shortlisted')}
+              className={`px-3 py-2 rounded-lg text-sm font-medium ${viewMode === 'shortlisted' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+            >
+              Shortlisted
+            </button>
+            <button
+              onClick={() => setViewMode('nonShortlisted')}
+              className={`px-3 py-2 rounded-lg text-sm font-medium ${viewMode === 'nonShortlisted' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+            >
+              Non-Shortlisted
+            </button>
+            <button
+              onClick={() => setViewMode('all')}
+              className={`px-3 py-2 rounded-lg text-sm font-medium ${viewMode === 'all' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+            >
+              All
+            </button>
+          </div>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-3 mt-3">
+          <select
+            value={scoreFilter}
+            onChange={(e) => setScoreFilter(e.target.value)}
+            className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">All Scores</option>
+            <option value="80-100">80-100% (Excellent)</option>
+            <option value="60-79">60-79% (Good)</option>
+            <option value="40-59">40-59% (Fair)</option>
+            <option value="0-39">Below 40%</option>
+          </select>
+          <input
+            type="text"
+            placeholder="Filter by skill..."
+            value={skillFilter}
+            onChange={(e) => setSkillFilter(e.target.value)}
+            className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as any)}
+            className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="score">Sort by Score</option>
+            <option value="name">Sort by Name</option>
+            <option value="ranking">Sort by Ranking</option>
+          </select>
+          <button
+            onClick={clearFilters}
+            className="px-3 py-2 text-sm text-slate-500 hover:text-slate-700"
+          >
+            Clear Filters
+          </button>
+        </div>
       </div>
 
       {loading ? (
-        <div className="space-y-3 sm:space-y-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <SkeletonCard key={i} />
-          ))}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+          <SkeletonTable rows={8} cols={6} />
         </div>
-      ) : candidates.length === 0 ? (
+      ) : filteredCandidates.length === 0 ? (
         <div className="bg-white rounded-xl p-8 text-center">
           <FaStar className="w-10 h-10 sm:w-12 sm:h-12 text-slate-300 mx-auto mb-4" />
-          <p className="text-slate-500">No shortlisted candidates yet</p>
-          <p className="text-sm text-slate-400 mt-2">Run screening to generate shortlist</p>
+          <p className="text-slate-500">No candidates found</p>
+          <p className="text-sm text-slate-400 mt-2">Try adjusting your filters or run screening for a job</p>
         </div>
       ) : (
-        <div className="space-y-3 sm:space-y-4">
-          {candidates.map((candidate, index) => (
-            <div
-              key={candidate._id}
-              className={`bg-white rounded-xl p-4 sm:p-6 shadow-sm border transition-all ${
-                compareMode.includes(candidate._id) ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-100'
-              }`}
-            >
-              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 sm:gap-4">
-                <div className="flex items-start gap-3 sm:gap-4">
-                  <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center font-bold text-white text-sm ${
-                    index < 3 ? 'bg-yellow-500' : 'bg-slate-600'
-                  }`}>
-                    {candidate.ranking}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-base sm:text-lg font-semibold text-slate-900">{candidate.applicantName}</h3>
-                      {candidate.score >= 80 && (
-                        <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">Strong</span>
-                      )}
-                    </div>
-                    <p className="text-sm text-slate-500">{candidate.applicantEmail}</p>
-                    <p className="text-sm text-slate-500 hidden sm:block">{candidate.jobTitle}</p>
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {candidate.applicantSkills?.slice(0, 3).map(skill => (
-                        <span key={skill} className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">{skill}</span>
-                      ))}
-                      {candidate.applicantSkills?.length > 3 && <span className="text-xs text-slate-500">+{candidate.applicantSkills.length - 3}</span>}
-                    </div>
-                  </div>
-                </div>
-                <div className="text-left sm:text-right flex sm:flex-col justify-between sm:justify-start items-center sm:items-end gap-2">
-                  <div className="text-2xl sm:text-3xl font-bold text-blue-600">{candidate.score}%</div>
-                  <p className="text-xs sm:text-sm text-slate-500">Match</p>
-                  <div className="flex gap-2 mt-1 sm:mt-2">
-                    <button
-                      onClick={() => setSelectedCandidate(candidate)}
-                      className="px-2 sm:px-3 py-1 text-xs sm:text-sm text-blue-600 hover:bg-blue-50 rounded-lg"
-                    >
-                      View
-                    </button>
-                    <button
-                      onClick={() => toggleCompare(candidate._id)}
-                      className={`px-2 sm:px-3 py-1 text-xs sm:text-sm rounded-lg ${
-                        compareMode.includes(candidate._id)
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      Compare
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-slate-100">
-                <p className="text-xs sm:text-sm text-slate-500 mb-2">Strengths</p>
-                <div className="flex flex-wrap gap-1 sm:gap-2">
-                  {candidate.strengths?.slice(0, 3).map(s => (
-                    <span key={s} className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs">{s}</span>
-                  ))}
-                </div>
-              </div>
-
-              {candidate.gaps?.length > 0 && (
-                <div className="mt-2 sm:mt-3">
-                  <p className="text-xs sm:text-sm text-slate-500 mb-2">Gaps</p>
-                  <div className="flex flex-wrap gap-1 sm:gap-2">
-                    {candidate.gaps?.slice(0, 2).map(g => (
-                      <span key={g} className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs">{g}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[800px]">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-semibold text-slate-600 w-10">
+                    <input
+                      type="checkbox"
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setCompareMode(filteredCandidates.map(c => c._id));
+                        } else {
+                          setCompareMode([]);
+                        }
+                      }}
+                      className="w-4 h-4 rounded border-slate-300"
+                    />
+                  </th>
+                  <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-semibold text-slate-600">#</th>
+                  <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-semibold text-slate-600">Candidate</th>
+                  <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-semibold text-slate-600 hidden md:table-cell">Job</th>
+                  <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-semibold text-slate-600 hidden lg:table-cell">Skills</th>
+                  <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-semibold text-slate-600">Score</th>
+                  <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-semibold text-slate-600">Status</th>
+                  <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-semibold text-slate-600 hidden md:table-cell">Strengths</th>
+                  <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-semibold text-slate-600">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredCandidates.map((candidate) => (
+                  <tr key={candidate._id} className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${compareMode.includes(candidate._id) ? 'bg-blue-50' : ''}`}>
+                    <td className="p-3 sm:p-4">
+                      <input
+                        type="checkbox"
+                        checked={compareMode.includes(candidate._id)}
+                        onChange={() => toggleCompare(candidate._id)}
+                        className="w-4 h-4 rounded border-slate-300"
+                      />
+                    </td>
+                    <td className="p-3 sm:p-4">
+                      <span className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-bold text-xs sm:text-sm ${candidate.ranking <= 3 ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-100 text-slate-600'}`}>
+                        {candidate.ranking}
+                      </span>
+                    </td>
+                    <td className="p-3 sm:p-4">
+                      <p className="font-medium text-slate-900 text-sm">{candidate.applicantName}</p>
+                      <p className="text-xs sm:text-sm text-slate-500">{candidate.applicantEmail}</p>
+                    </td>
+                    <td className="p-3 sm:p-4 hidden md:table-cell">
+                      <p className="text-sm text-slate-600 truncate max-w-[150px]">{candidate.jobTitle}</p>
+                    </td>
+                    <td className="p-3 sm:p-4 hidden lg:table-cell">
+                      <div className="flex flex-wrap gap-1">
+                        {candidate.applicantSkills?.slice(0, 2).map(skill => (
+                          <span key={skill} className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">{skill}</span>
+                        ))}
+                        {candidate.applicantSkills?.length > 2 && <span className="text-xs text-slate-500">+{candidate.applicantSkills.length - 2}</span>}
+                      </div>
+                    </td>
+                    <td className="p-3 sm:p-4">
+                      <div className="flex items-center gap-2">
+                        <div className="w-12 sm:w-16 h-2 bg-slate-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-blue-600 rounded-full transition-all" style={{ width: `${candidate.score}%` }} />
+                        </div>
+                        <span className={`px-1.5 sm:px-2 py-0.5 rounded text-xs font-medium ${getScoreColor(candidate.score)}`}>
+                          {candidate.score}%
+                        </span>
+                      </div>
+                    </td>
+                    <td className="p-3 sm:p-4">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${getStatusBadge(candidate.status)}`}>
+                        {candidate.status}
+                      </span>
+                    </td>
+                    <td className="p-3 sm:p-4 hidden md:table-cell">
+                      <div className="flex flex-wrap gap-1">
+                        {candidate.strengths?.slice(0, 2).map(s => (
+                          <span key={s} className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">{s}</span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="p-3 sm:p-4">
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => setSelectedCandidate(candidate)}
+                          className="px-2 sm:px-3 py-1 text-xs sm:text-sm text-blue-600 hover:bg-blue-50 rounded-lg"
+                          title="View Details"
+                        >
+                          View
+                        </button>
+                        <button
+                          onClick={() => toggleCompare(candidate._id)}
+                          className={`px-2 sm:px-3 py-1 text-xs sm:text-sm rounded-lg ${
+                            compareMode.includes(candidate._id)
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                          title="Compare"
+                        >
+                          {compareMode.includes(candidate._id) ? '✓' : '⚖'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex items-center justify-between p-4 border-t border-slate-100">
+            <p className="text-sm text-slate-500">
+              Showing {filteredCandidates.length} of {allCandidates.length} candidates
+            </p>
+          </div>
         </div>
       )}
 
@@ -222,19 +484,19 @@ export default function ShortlistPage() {
           </div>
           <div className="space-y-1 sm:space-y-2 mb-3 max-h-24 overflow-y-auto">
             {compareMode.map(id => {
-              const candidate = candidates.find(c => c._id === id);
+              const candidate = allCandidates.find(c => c._id === id);
               return candidate ? (
                 <div key={id} className="text-xs text-slate-600 truncate">
-                  {candidate.applicantName}
+                  {candidate.applicantName} - {candidate.score}%
                 </div>
               ) : null;
             })}
           </div>
           <button
-            onClick={() => alert('Compare functionality coming soon!')}
-            className="w-full py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-xs sm:text-sm"
+            onClick={handleCompare}
+            className="w-full py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-xs sm:text-sm flex items-center justify-center gap-2"
           >
-            Compare Selected
+            <FaChartBar /> Compare Selected
           </button>
         </div>
       )}

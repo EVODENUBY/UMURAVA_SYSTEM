@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { api, ENDPOINTS } from '@/lib/api';
-import { FaPlus, FaEdit, FaTrash, FaEye, FaSearch, FaExclamationTriangle, FaChartBar, FaMapMarker, FaClock, FaAngleLeft, FaAngleRight } from 'react-icons/fa';
+import { FaPlus, FaEdit, FaTrash, FaEye, FaSearch, FaExclamationTriangle, FaChartBar, FaMapMarker, FaClock, FaAngleLeft, FaAngleRight, FaUsers, FaUser, FaEnvelope, FaPhone, FaBriefcase } from 'react-icons/fa';
 import { SkeletonTable, SkeletonCard } from '@/components/ui/Skeleton';
+import ApplicantsModal from '@/components/ApplicantsModal';
 
 interface Job {
   _id: string;
@@ -78,6 +79,10 @@ export default function JobsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [viewingJob, setViewingJob] = useState<Job | null>(null);
   const [selectedJobForView, setSelectedJobForView] = useState<Job | null>(null);
+  const [showApplicantsModal, setShowApplicantsModal] = useState(false);
+  const [applicantsJob, setApplicantsJob] = useState<Job | null>(null);
+  const [applicants, setApplicants] = useState<{ internal: any[]; external: any[] }>({ internal: [], external: [] });
+  const [loadingApplicants, setLoadingApplicants] = useState(false);
   const [biasResults, setBiasResults] = useState<{ biasAlerts: { type: string; severity: string; description: string; suggestion: string }[]; alertCount: number; hasHighSeverity: boolean } | null>(null);
   const [jobBiasCounts, setJobBiasCounts] = useState<Record<string, { count: number; hasHigh: boolean }>>({});
   const [jobStats, setJobStats] = useState<{ jobId: string; title: string; statistics: { totalCandidates: number; averageScore: number; highestScore: number; lowestScore: number; shortlistedCount: number; rejectedCount: number; pendingCount: number; interviewCount: number; biasAlertCount: number } } | null>(null);
@@ -160,8 +165,10 @@ export default function JobsPage() {
       };
       if (editingJob) {
         await api.put(ENDPOINTS.JOBS.UPDATE(editingJob._id), formData, token || undefined);
+        showToast('Job updated successfully', 'success');
       } else {
         await api.post(ENDPOINTS.JOBS.CREATE, formData, token || undefined);
+        showToast('Job created successfully', 'success');
       }
       setShowModal(false);
       setForm(initialForm);
@@ -169,6 +176,7 @@ export default function JobsPage() {
       fetchJobs();
     } catch (error) {
       console.error('Failed to save job:', error);
+      showToast('Failed to save job. Please try again.', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -212,6 +220,25 @@ export default function JobsPage() {
     });
   };
 
+  const handleToggleStatus = async (job: Job) => {
+    const newStatus = job.status === 'published' ? 'draft' : 'published';
+    try {
+      const response = await api.put(ENDPOINTS.JOBS.UPDATE(job._id), { status: newStatus }, token || undefined);
+      if (response && (response as any).success) {
+        setJobs(prevJobs => prevJobs.map(j => j._id === job._id ? { ...j, status: newStatus } : j));
+        if (viewingJob && viewingJob._id === job._id) {
+          setViewingJob({ ...viewingJob, status: newStatus });
+        }
+        showToast(`Job ${newStatus === 'published' ? 'published' : 'unpublished'} successfully`, 'success');
+      } else {
+        throw new Error('Failed to update status');
+      }
+    } catch (error) {
+      console.error('Failed to update job status:', error);
+      showToast('Failed to update job status', 'error');
+    }
+  };
+
   const handleDetectBias = async (job: Job) => {
     setSelectedJobForView(job);
     setBiasResults(null);
@@ -240,6 +267,11 @@ export default function JobsPage() {
     } finally {
       setLoadingBias(false);
     }
+  };
+
+  const handleViewApplicants = (job: Job) => {
+    setApplicantsJob(job);
+    setShowApplicantsModal(true);
   };
 
   const handleGetStats = async (job: Job) => {
@@ -425,7 +457,7 @@ export default function JobsPage() {
                 jobs.map((job) => (
                   <tr key={job._id} className="border-b border-slate-50 hover:bg-slate-50">
                     <td className="p-3 sm:p-4">
-                      <p className="font-medium text-slate-900 text-sm sm:text-base">{job.title}</p>
+                      <p className="font-medium text-blue-600 text-sm sm:text-base flex items-center gap-2"><FaBriefcase className="w-3 h-3" />{job.title}</p>
                       <p className="text-xs sm:text-sm text-slate-500 truncate max-w-[120px] sm:max-w-[200px] md:max-w-xs">{job.description?.substring(0, 50)}...</p>
                     </td>
                     <td className="p-3 sm:p-4 text-slate-600 hidden md:table-cell text-sm">
@@ -453,6 +485,9 @@ export default function JobsPage() {
                     </td>
                     <td className="p-3 sm:p-4">
                       <div className="flex gap-1 sm:gap-2">
+                        <button onClick={() => handleViewApplicants(job)} className="relative p-1.5 sm:p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="View Applicants">
+                          <FaUsers className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                        </button>
                         <button onClick={() => setViewingJob(job)} className="p-1.5 sm:p-2 text-green-600 hover:bg-green-50 rounded-lg" title="View Details">
                           <FaEye className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                         </button>
@@ -533,6 +568,12 @@ export default function JobsPage() {
           </div>
         )}
       </div>
+
+      <ApplicantsModal 
+        job={applicantsJob}
+        isOpen={showApplicantsModal}
+        onClose={() => setShowApplicantsModal(false)}
+      />
 
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
@@ -620,8 +661,8 @@ export default function JobsPage() {
                     ))}
                   </div>
                   <div className="flex gap-1">
-                    <input type="text" value={eduInput.degree} onChange={(e) => setEduInput({ ...eduInput, degree: e.target.value })} className="flex-1 px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Degree" />
-                    <input type="text" value={eduInput.field} onChange={(e) => setEduInput({ ...eduInput, field: e.target.value })} className="flex-1 px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Field" />
+                    <input type="text" value={eduInput.degree} onChange={(e) => setEduInput({ ...eduInput, degree: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addEdu())} className="flex-1 px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Degree" />
+                    <input type="text" value={eduInput.field} onChange={(e) => setEduInput({ ...eduInput, field: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addEdu())} className="flex-1 px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Field" />
                     <button type="button" onClick={addEdu} className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 text-xs">Add</button>
                   </div>
                 </div>
@@ -767,7 +808,15 @@ export default function JobsPage() {
                 <h2 className="text-lg sm:text-xl font-bold text-slate-900">{viewingJob.title}</h2>
                 <p className="text-sm text-slate-500 capitalize">{viewingJob.employmentType} • {viewingJob.jobLevel} Level</p>
               </div>
-              <button onClick={() => setViewingJob(null)} className="text-slate-400 hover:text-slate-600 text-2xl">×</button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => { setEditingJob(viewingJob); setForm({ title: viewingJob.title, description: viewingJob.description, employmentType: viewingJob.employmentType, jobLevel: viewingJob.jobLevel, requiredSkills: viewingJob.requiredSkills || [], responsibilities: viewingJob.responsibilities || [], experience: viewingJob.experience || '', education: viewingJob.education || [], certifications: viewingJob.certifications || [], languages: viewingJob.languages || [], location: viewingJob.location || { address: '', city: '', country: '', remote: false }, salary: viewingJob.salary || { min: 0, max: 0, currency: 'USD' }, benefits: viewingJob.benefits || [], applicationProcess: viewingJob.applicationProcess || { steps: ['Apply', 'Screening', 'Interview', 'Offer'] }, tags: viewingJob.tags || [], applicationDeadline: viewingJob.applicationDeadline ? viewingJob.applicationDeadline.split('T')[0] : '', expirationDate: viewingJob.expirationDate ? viewingJob.expirationDate.split('T')[0] : '', status: viewingJob.status }); setViewingJob(null); setShowModal(true); }} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Edit Job">
+                  <FaEdit className="w-4 h-4" />
+                </button>
+                <button onClick={() => handleToggleStatus(viewingJob)} className={`px-3 py-1.5 rounded-lg text-sm font-medium ${viewingJob.status === 'published' ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' : 'bg-green-100 text-green-700 hover:bg-green-200'}`} title={viewingJob.status === 'published' ? 'Unpublish' : 'Publish'}>
+                  {viewingJob.status === 'published' ? 'Unpublish' : 'Publish'}
+                </button>
+                <button onClick={() => setViewingJob(null)} className="text-slate-400 hover:text-slate-600 text-2xl">×</button>
+              </div>
             </div>
             
             {viewingJob.countdown && (

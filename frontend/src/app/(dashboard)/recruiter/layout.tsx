@@ -7,6 +7,7 @@ import Sidebar from '@/components/ui/Sidebar';
 import Navbar from '@/components/ui/Navbar';
 import ProtectedRoute from '@/components/ui/ProtectedRoute';
 import { ROLES } from '@/lib/types';
+import AIChatbot from '@/components/ui/AIChatbot';
 
 const recruiterLinks = [
   { href: '/recruiter', label: 'Dashboard', icon: <FaHome /> },
@@ -87,6 +88,7 @@ function RecruiterLayoutInner({ children }: { children: ReactNode }) {
           />
           <main className="h-[calc(100vh-57px)] overflow-y-auto overflow-x-hidden">{children}</main>
         </div>
+        <AIChatbot />
       </div>
     </ProtectedRoute>
   );

@@ -39,6 +39,7 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
+  const [applicantSourceFilter, setApplicantSourceFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalUsers, setTotalUsers] = useState(0);
@@ -53,9 +54,10 @@ export default function AdminUsersPage() {
       setLoading(true);
       const params = new URLSearchParams();
       params.append('page', page.toString());
-      params.append('limit', '10');
+      params.append('limit', roleFilter === 'applicant' && applicantSourceFilter ? '50' : '10');
       if (searchQuery) params.append('search', searchQuery);
       if (roleFilter) params.append('role', roleFilter);
+      if (applicantSourceFilter) params.append('applicantSource', applicantSourceFilter);
 
       const response = await api.get<{ success: boolean; data: { users: User[]; pagination: { page: number; limit: number; total: number; pages: number } } }>(`${ENDPOINTS.ADMIN.USERS}?${params}`, token || undefined);
       const usersArray = response.data?.users || [];
@@ -72,7 +74,7 @@ export default function AdminUsersPage() {
 
   useEffect(() => {
     fetchUsers(currentPage);
-  }, [currentPage, roleFilter]);
+  }, [currentPage, roleFilter, applicantSourceFilter]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -180,6 +182,20 @@ export default function AdminUsersPage() {
               <option value="applicant">Applicant</option>
             </select>
           </div>
+          {roleFilter === 'applicant' && (
+            <div className="relative">
+              <FaFilter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+              <select
+                value={applicantSourceFilter}
+                onChange={(e) => setApplicantSourceFilter(e.target.value)}
+                className="pl-10 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer"
+              >
+                <option value="">All Sources</option>
+                <option value="internal">Internal</option>
+                <option value="external">External</option>
+              </select>
+            </div>
+          )}
           <button
             type="submit"
             className="px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
@@ -325,7 +341,7 @@ export default function AdminUsersPage() {
                     value={createForm.firstName}
                     onChange={(e) => setCreateForm({ ...createForm, firstName: e.target.value })}
                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="John"
+                    placeholder="Evode"
                   />
                 </div>
                 <div>
@@ -335,7 +351,7 @@ export default function AdminUsersPage() {
                     value={createForm.lastName}
                     onChange={(e) => setCreateForm({ ...createForm, lastName: e.target.value })}
                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Doe"
+                    placeholder="muyisingize"
                   />
                 </div>
               </div>
@@ -346,7 +362,7 @@ export default function AdminUsersPage() {
                   value={createForm.email}
                   onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="john@example.com"
+                  placeholder="evode@gmail.com"
                 />
               </div>
               <div>

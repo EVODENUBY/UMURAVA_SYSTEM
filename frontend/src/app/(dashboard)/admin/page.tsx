@@ -14,6 +14,8 @@ interface DashboardStats {
   totalRecruiters: number;
   activeJobs: number;
   pendingScreenings: number;
+  totalInternalApplicants: number;
+  totalExternalApplicants: number;
   recentUsers: { id: string; fullName: string; email: string; role: string; isActive: boolean; createdAt: string }[];
   recentJobs: { id: string; title: string; status: string; createdAt: string }[];
   recentActivity: {
@@ -45,6 +47,8 @@ export default function AdminDashboard() {
     }
   };
 
+  const totalApplicantsCount = (stats?.totalInternalApplicants || 0) + (stats?.totalExternalApplicants || 0);
+
   const statCards = [
     {
       title: 'Total Users',
@@ -61,11 +65,12 @@ export default function AdminDashboard() {
       href: '/admin/users?role=recruiter',
     },
     {
-      title: 'Applicants',
-      value: stats?.totalApplicants || 0,
+      title: 'Total Applicants',
+      value: totalApplicantsCount,
       icon: <FaUserGraduate className="w-5 h-5" />,
       color: 'bg-cyan-500',
       href: '/admin/users?role=applicant',
+      subtitle: `Internal: ${stats?.totalInternalApplicants || 0} | External: ${stats?.totalExternalApplicants || 0}`
     },
     {
       title: 'Total Jobs',
@@ -120,19 +125,22 @@ export default function AdminDashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3">
         {statCards.map((stat, index) => (
           <Link
             key={index}
             href={stat.href || '#'}
-            className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-lg transition-shadow cursor-pointer"
+            className="bg-white rounded-lg border border-slate-200 p-3 sm:p-4 hover:shadow-md transition-shadow cursor-pointer"
           >
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-500">{stat.title}</p>
-                <p className="text-3xl font-bold text-slate-900 mt-2">{stat.value.toLocaleString()}</p>
+            <div className="flex items-center justify-between">
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] sm:text-xs font-medium text-slate-500 truncate">{stat.title}</p>
+                <p className="text-lg sm:text-xl font-bold text-slate-900 mt-0.5">{stat.value.toLocaleString()}</p>
+                {stat.subtitle && (
+                  <p className="text-[9px] sm:text-[10px] text-slate-400 mt-0.5 truncate">{stat.subtitle}</p>
+                )}
               </div>
-              <div className={`p-3 rounded-xl ${stat.color} text-white`}>
+              <div className={`${stat.color} text-white flex-shrink-0 ml-2 flex items-center justify-center`}>
                 {stat.icon}
               </div>
             </div>

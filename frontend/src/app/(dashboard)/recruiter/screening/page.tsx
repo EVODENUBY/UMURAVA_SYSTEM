@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/contexts/ToastContext';
 import { api, ENDPOINTS } from '@/lib/api';
 import { FaPlay, FaSearch, FaFilter, FaUser, FaStar, FaExclamationTriangle, FaAngleLeft, FaAngleRight } from 'react-icons/fa';
 import { SkeletonTable, SkeletonCard } from '@/components/ui/Skeleton';
@@ -40,18 +41,37 @@ interface ScreeningStats {
   interviewCount: number;
 }
 
+interface BestCandidate {
+  candidateId: string;
+  score: number;
+  name: string;
+  matchScore?: number;
+}
+
+interface BestCandidates {
+  bestOverall: BestCandidate | null;
+  bestSkills: BestCandidate | null;
+  bestExperience: BestCandidate | null;
+  bestEducation: BestCandidate | null;
+}
+
 export default function ScreeningPage() {
   const { token } = useAuth();
+  const { showToast } = useToast();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [selectedJob, setSelectedJob] = useState<string>('');
   const [results, setResults] = useState<ScreeningResult[]>([]);
   const [stats, setStats] = useState<ScreeningStats | null>(null);
+  const [bestCandidates, setBestCandidates] = useState<BestCandidates | null>(null);
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
+  const [screeningMode, setScreeningMode] = useState<'standard' | 'best' | 'advanced'>('standard');
   const [selectedResult, setSelectedResult] = useState<ScreeningResult | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
+  const [threshold, setThreshold] = useState<number>(50);
+  const [shortlistThreshold, setShortlistThreshold] = useState<number>(75);
   const ITEMS_PER_PAGE = 10;
 
   useEffect(() => {
@@ -110,20 +130,40 @@ export default function ScreeningPage() {
     }
   };
 
-  const runScreening = async () => {
-    if (!selectedJob) return;
-    setRunning(true);
-    try {
-      const response = await api.post<{ success: boolean }>(ENDPOINTS.SCREENING.RUN, { jobId: selectedJob }, token || undefined);
-      if (response.success) {
-        fetchResults();
+const runScreening = async () => {
+  if (!selectedJob) return;
+  setRunning(true);
+  try {
+    const response = await api.post<{ success: boolean; data: { bestCandidates: BestCandidates } }>(
+      ENDPOINTS.SCREENING.RUN, 
+      { 
+        jobId: selectedJob,
+        threshold: threshold,
+        autoShortlist: true,
+        shortlistThreshold: shortlistThreshold,
+        screeningMode: screeningMode
+      }, 
+      token || undefined
+    );
+    if (response.success) {
+      showToast(`Screening completed in ${screeningMode} mode`, 'success');
+      if (response.data?.bestCandidates) {
+        setBestCandidates(response.data.bestCandidates);
       }
-    } catch (error) {
-      console.error('Failed to run screening:', error);
-    } finally {
-      setRunning(false);
+      fetchResults();
     }
-  };
+  } catch (error: any) {
+    console.error('Failed to run screening:', error);
+    const errorMsg = error?.response?.data?.error?.message || '';
+    if (errorMsg.includes('busy') || errorMsg.includes('demand') || error?.response?.status === 429) {
+      showToast('Model is busy due to high demand. Please try again in a few moments.', 'error');
+    } else {
+      showToast(errorMsg || 'Failed to run screening. Please try again.', 'error');
+    }
+  } finally {
+    setRunning(false);
+  }
+};
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return 'bg-green-100 text-green-700';
@@ -152,25 +192,66 @@ export default function ScreeningPage() {
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900">AI Screening</h1>
           <p className="text-sm sm:text-base text-slate-500">Run AI-powered candidate screening</p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-start sm:items-center">
-          <select
-            value={selectedJob}
-            onChange={(e) => { setSelectedJob(e.target.value); setCurrentPage(1); }}
-            className="px-3 sm:px-4 py-2 border border-slate-200 rounded-lg text-sm sm:text-base w-full sm:w-auto"
-          >
-            <option value="">Select Job</option>
-            {jobs.map(job => (
-              <option key={job._id} value={job._id}>{job.title}</option>
-            ))}
-          </select>
-          <button
-            onClick={runScreening}
-            disabled={!selectedJob || running}
-            className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm sm:text-base w-full sm:w-auto justify-center"
-          >
-            <FaPlay /> {running ? 'Running...' : 'Run'}
-          </button>
-        </div>
+       <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-start sm:items-center">
+           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 items-start sm:items-center">
+             <select
+               value={selectedJob}
+               onChange={(e) => { setSelectedJob(e.target.value); setCurrentPage(1); }}
+               className="px-3 sm:px-4 py-2 border border-slate-200 rounded-lg text-sm sm:text-base w-full sm:w-auto"
+             >
+               <option value="">Select Job</option>
+               {jobs.map(job => (
+                 <option key={job._id} value={job._id}>{job.title}</option>
+               ))}
+             </select>
+           </div>
+           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 items-start sm:items-center">
+             <label className="text-xs sm:text-sm text-slate-500 mb-1">Threshold</label>
+             <input
+               type="number"
+               value={threshold}
+               onChange={(e) => setThreshold(parseInt(e.target.value) || 0)}
+               min={0}
+               max={100}
+               className="w-full sm:w-auto px-3 sm:px-4 py-2 border border-slate-200 rounded-lg text-sm sm:text-base"
+               placeholder="0"
+             />
+           </div>
+<div className="flex flex-col sm:flex-row gap-2 sm:gap-3 items-start sm:items-center">
+              <label className="text-xs sm:text-sm text-slate-500 mb-1">Shortlist Threshold</label>
+              <input
+                type="number"
+                value={shortlistThreshold}
+                onChange={(e) => setShortlistThreshold(parseInt(e.target.value) || 75)}
+                min={0}
+                max={100}
+                className="w-full sm:w-auto px-3 sm:px-4 py-2 border border-slate-200 rounded-lg text-sm sm:text-base"
+                placeholder="75"
+              />
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 items-start sm:items-center">
+              <label className="text-xs sm:text-sm text-slate-500 mb-1">Mode</label>
+              <select
+                value={screeningMode}
+                onChange={(e) => setScreeningMode(e.target.value as 'standard' | 'best' | 'advanced')}
+                className="px-3 sm:px-4 py-2 border border-slate-200 rounded-lg text-sm sm:text-base w-full sm:w-auto"
+              >
+                <option value="standard">Standard</option>
+                <option value="best">Best Match</option>
+                <option value="advanced">Advanced</option>
+              </select>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 items-start sm:items-center">
+              <label className="text-xs sm:text-sm text-slate-500 mb-1">&nbsp;</label>
+              <button
+                onClick={runScreening}
+                disabled={!selectedJob || running}
+                className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm sm:text-base w-full sm:w-auto justify-center"
+              >
+                <FaPlay /> {running ? 'Running...' : 'Run'}
+              </button>
+            </div>
+         </div>
       </div>
 
       {selectedJob && stats && (
@@ -198,6 +279,44 @@ export default function ScreeningPage() {
           <div className="bg-white rounded-xl p-3 sm:p-4 shadow-sm border border-slate-100 text-center">
             <p className="text-lg sm:text-2xl font-bold text-red-600">{stats.rejectedCount}</p>
             <p className="text-xs sm:text-sm text-slate-500">Rejected</p>
+          </div>
+        </div>
+      )}
+
+      {bestCandidates && (
+        <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4 sm:p-6 mb-4 sm:mb-6 border border-blue-100">
+          <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+            <FaStar className="text-yellow-500" /> Best Candidates
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {bestCandidates.bestOverall && (
+              <div className="bg-white rounded-lg p-4 shadow-sm">
+                <p className="text-xs text-slate-500 mb-1">Best Overall</p>
+                <p className="font-bold text-slate-900 truncate">{bestCandidates.bestOverall.name}</p>
+                <p className="text-2xl font-bold text-blue-600">{bestCandidates.bestOverall.score}%</p>
+              </div>
+            )}
+            {bestCandidates.bestSkills && (
+              <div className="bg-white rounded-lg p-4 shadow-sm">
+                <p className="text-xs text-slate-500 mb-1">Best Skills</p>
+                <p className="font-bold text-slate-900 truncate">{bestCandidates.bestSkills.name}</p>
+                <p className="text-2xl font-bold text-green-600">{bestCandidates.bestSkills.matchScore || bestCandidates.bestSkills.score}%</p>
+              </div>
+            )}
+            {bestCandidates.bestExperience && (
+              <div className="bg-white rounded-lg p-4 shadow-sm">
+                <p className="text-xs text-slate-500 mb-1">Best Experience</p>
+                <p className="font-bold text-slate-900 truncate">{bestCandidates.bestExperience.name}</p>
+                <p className="text-2xl font-bold text-purple-600">{bestCandidates.bestExperience.matchScore || bestCandidates.bestExperience.score}%</p>
+              </div>
+            )}
+            {bestCandidates.bestEducation && (
+              <div className="bg-white rounded-lg p-4 shadow-sm">
+                <p className="text-xs text-slate-500 mb-1">Best Education</p>
+                <p className="font-bold text-slate-900 truncate">{bestCandidates.bestEducation.name}</p>
+                <p className="text-2xl font-bold text-orange-600">{bestCandidates.bestEducation.matchScore || bestCandidates.bestEducation.score}%</p>
+              </div>
+            )}
           </div>
         </div>
       )}
