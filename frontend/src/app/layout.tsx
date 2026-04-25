@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { LoadingProvider } from '@/contexts/LoadingContext';
 import { ToastProvider } from '@/contexts/ToastContext';
+import { WebSocketNotifications } from '@/contexts/WebSocketNotifications';
 
 export const metadata: Metadata = {
   title: 'Umurava AI - AI Powered Recruitment Platform',
@@ -26,7 +27,10 @@ export default function RootLayout({
       <body className="m-0 p-0">
         <AuthProvider>
           <LoadingProvider>
-            <ToastProvider>{children}</ToastProvider>
+            <ToastProvider>
+              {children}
+              <WebSocketNotifications />
+            </ToastProvider>
           </LoadingProvider>
         </AuthProvider>
       </body>

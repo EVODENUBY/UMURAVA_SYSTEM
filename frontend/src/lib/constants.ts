@@ -68,6 +68,10 @@ AUTH: {
     COMPARE: '/api/shortlist/compare',
     EXPLAIN: (resultId: string) => `/api/shortlist/explain/${resultId}`,
   },
+  AI: {
+    ASSISTANT: '/api/ai/assistant',
+    GUEST: '/api/ai/guest',
+  },
   ADMIN: {
     DASHBOARD: '/api/admin/dashboard',
     USERS: '/api/admin/users',
