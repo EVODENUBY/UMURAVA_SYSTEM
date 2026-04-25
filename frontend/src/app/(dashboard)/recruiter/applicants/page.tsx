@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { api, ENDPOINTS } from '@/lib/api';
 import { API_BASE_URL } from '@/lib/constants';
-import { FaSearch, FaFilter, FaUserPlus, FaUpload, FaDownload, FaEye, FaEdit, FaTrash, FaAngleLeft, FaAngleRight, FaBriefcase, FaGraduationCap, FaLanguage, FaStar, FaLinkedin, FaGithub, FaGlobe } from 'react-icons/fa';
+import { FaSearch, FaFilter, FaUserPlus, FaUpload, FaDownload, FaEye, FaEdit, FaTrash, FaAngleLeft, FaAngleRight, FaBriefcase, FaGraduationCap, FaLanguage, FaStar, FaLinkedin, FaGithub, FaGlobe, FaChartLine } from 'react-icons/fa';
 import { SkeletonTable, SkeletonCard } from '@/components/ui/Skeleton';
 
 interface ExternalApplicant {
@@ -14,18 +14,40 @@ interface ExternalApplicant {
   firstName?: string;
   lastName?: string;
   email: string;
-  phone: string;
+  phone?: string;
+  jobId?: { title: string };
   skills: string[];
-  skillDetails?: { name: string; level: string; yearsOfExperience: number }[];
-  experience: { years: number; currentRole?: string };
-  education: { degree: string; institution: string; year?: number; field?: string }[];
-  languages?: { name: string; proficiency: string }[];
-  resumeText?: string;
-  status: string;
-  source: string;
-  jobId: { _id: string; title: string };
-  createdAt: string;
+  skillDetails?: Array<{
+    name: string;
+    level: string;
+    yearsOfExperience: number;
+  }>;
+  experience: {
+    years: number;
+    currentRole?: string;
+    previousRoles?: Array<{
+      title: string;
+      company: string;
+      duration: string;
+    }>;
+  };
+  education: Array<{
+    degree: string;
+    institution: string;
+    year: number;
+    field?: string;
+  }>;
+  languages?: Array<{
+    name: string;
+    proficiency: string;
+  }>;
+  resumeText: string;
+  resumeFilePath?: string;
   resumeLink?: string;
+  source: 'pdf' | 'csv' | 'excel' | 'link' | 'manual';
+  status: 'screening' | 'interview' | 'offer' | 'hired' | 'rejected';
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface InternalApplicant {
@@ -129,11 +151,34 @@ export default function ApplicantsPage() {
   const [selectedExternalIds, setSelectedExternalIds] = useState<string[]>([]);
   const [selectAllExternal, setSelectAllExternal] = useState(false);
   const [bulkSelectMode, setBulkSelectMode] = useState(false);
+  const [applicantAnalytics, setApplicantAnalytics] = useState<ApplicantAnalytics | null>(null);
+  const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalApplicants, setTotalApplicants] = useState(0);
   const ITEMS_PER_PAGE = 10;
+
+interface ApplicantAnalytics {
+  applicant: {
+    _id: string;
+    name: string;
+    email: string;
+  };
+  screeningResults: Array<{
+    _id: string;
+    score: number;
+    status: string;
+    strengths: string[];
+    gaps: string[];
+    reasoning: string;
+    jobId: {
+      title: string;
+    };
+    createdAt: string;
+  }>;
+}
 
   const showConfirmation = (message: string, action: () => void) => {
     setConfirmMessage(message);
@@ -406,6 +451,25 @@ export default function ApplicantsPage() {
     } catch (error) {
       console.error('CV download error:', error);
       showToast('Failed to download CV', 'error');
+    }
+  };
+
+  const fetchApplicantAnalytics = async (applicantId: string) => {
+    setLoadingAnalytics(true);
+    try {
+      const response = await api.get<{ success: boolean; data: ApplicantAnalytics }>(
+        `/analytics/applicants/${applicantId}`,
+        token || undefined
+      );
+      if (response.success) {
+        setApplicantAnalytics(response.data);
+        setShowAnalyticsModal(true);
+      }
+    } catch (error) {
+      console.error('Failed to fetch applicant analytics:', error);
+      showToast('Failed to load applicant analytics', 'error');
+    } finally {
+      setLoadingAnalytics(false);
     }
   };
 
@@ -1117,16 +1181,32 @@ export default function ApplicantsPage() {
                     </div>
                   )}
                   
-                  {selectedApplicant.experience && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-xs text-slate-500">Experience</p>
-                        <p className="text-sm text-slate-900">{selectedApplicant.experience.years || 0} years</p>
-                      </div>
-                      {selectedApplicant.experience.currentRole && (
+                   {selectedApplicant.experience && (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                          <p className="text-xs text-slate-500">Current Role</p>
-                          <p className="text-sm text-slate-900">{selectedApplicant.experience.currentRole}</p>
+                          <p className="text-xs text-slate-500">Experience</p>
+                          <p className="text-sm text-slate-900">{selectedApplicant.experience.years || 0} years</p>
+                        </div>
+                        {selectedApplicant.experience.currentRole && (
+                          <div>
+                            <p className="text-xs text-slate-500">Current Role</p>
+                            <p className="text-sm text-slate-900">{selectedApplicant.experience.currentRole}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {selectedApplicant.experience.previousRoles && selectedApplicant.experience.previousRoles.length > 0 && (
+                        <div>
+                          <p className="text-xs text-slate-500 mb-2">Previous Roles</p>
+                          <div className="space-y-2">
+                            {selectedApplicant.experience.previousRoles.map((role, i) => (
+                              <div key={i} className="p-3 bg-slate-50 rounded-lg">
+                                <p className="font-medium text-slate-900 text-sm">{role.title}</p>
+                                <p className="text-xs text-slate-600">{role.company} • {role.duration}</p>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1375,12 +1455,19 @@ export default function ApplicantsPage() {
                     </select>
                   </div>
 
-                  <div className="pt-4 border-t border-slate-100">
+                  <div className="pt-4 border-t border-slate-100 space-y-2">
                     <button
                       onClick={() => handleDownloadCV(selectedApplicant._id)}
                       className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 w-full"
                     >
                       <FaDownload /> Download CV
+                    </button>
+                    <button
+                      onClick={() => fetchApplicantAnalytics(selectedApplicant._id)}
+                      disabled={loadingAnalytics}
+                      className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 w-full"
+                    >
+                      <FaChartLine /> {loadingAnalytics ? 'Loading...' : 'View Analytics'}
                     </button>
                   </div>
                 </>
@@ -1476,6 +1563,114 @@ export default function ApplicantsPage() {
                   Close
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAnalyticsModal && applicantAnalytics && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="p-4 sm:p-6 border-b border-slate-100 flex justify-between items-center">
+              <div>
+                <h2 className="text-lg sm:text-xl font-bold text-slate-900">{applicantAnalytics.applicant.name}</h2>
+                <p className="text-sm text-slate-500">Application Analytics</p>
+              </div>
+              <button onClick={() => { setShowAnalyticsModal(false); setApplicantAnalytics(null); }} className="text-slate-400 hover:text-slate-600 text-2xl">×</button>
+            </div>
+            <div className="p-4 sm:p-6 space-y-6">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                <div className="text-center p-3 sm:p-4 bg-blue-50 rounded-xl">
+                  <p className="text-xl sm:text-2xl font-bold text-blue-600">{applicantAnalytics.screeningResults.length}</p>
+                  <p className="text-xs sm:text-sm text-slate-500">Total Screenings</p>
+                </div>
+                <div className="text-center p-3 sm:p-4 bg-green-50 rounded-xl">
+                  <p className="text-xl sm:text-2xl font-bold text-green-600">
+                    {applicantAnalytics.screeningResults.filter(r => r.status === 'shortlisted' || r.status === 'interview').length}
+                  </p>
+                  <p className="text-xs sm:text-sm text-slate-500">Advanced</p>
+                </div>
+                <div className="text-center p-3 sm:p-4 bg-yellow-50 rounded-xl">
+                  <p className="text-xl sm:text-2xl font-bold text-yellow-600">
+                    {applicantAnalytics.screeningResults.filter(r => r.status === 'pending').length}
+                  </p>
+                  <p className="text-xs sm:text-sm text-slate-500">Pending</p>
+                </div>
+                <div className="text-center p-3 sm:p-4 bg-red-50 rounded-xl">
+                  <p className="text-xl sm:text-2xl font-bold text-red-600">
+                    {applicantAnalytics.screeningResults.filter(r => r.status === 'rejected').length}
+                  </p>
+                  <p className="text-xs sm:text-sm text-slate-500">Rejected</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="text-center p-4 bg-purple-50 rounded-xl">
+                  <p className="text-2xl font-bold text-purple-600">
+                    {applicantAnalytics.screeningResults.length > 0
+                      ? Math.round(applicantAnalytics.screeningResults.reduce((sum, r) => sum + r.score, 0) / applicantAnalytics.screeningResults.length)
+                      : 0}%
+                  </p>
+                  <p className="text-sm text-slate-500">Average Score</p>
+                </div>
+                <div className="text-center p-4 bg-indigo-50 rounded-xl">
+                  <p className="text-2xl font-bold text-indigo-600">
+                    {applicantAnalytics.screeningResults.length > 0
+                      ? Math.max(...applicantAnalytics.screeningResults.map(r => r.score))
+                      : 0}%
+                  </p>
+                  <p className="text-sm text-slate-500">Best Score</p>
+                </div>
+              </div>
+
+              {applicantAnalytics.screeningResults.length > 0 && (
+                <div>
+                  <h3 className="font-semibold text-slate-900 mb-3">Screening History</h3>
+                  <div className="space-y-3 max-h-64 overflow-y-auto">
+                    {applicantAnalytics.screeningResults.map((result, index) => (
+                      <div key={result._id} className="p-3 bg-slate-50 rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <div>
+                            <p className="font-medium text-slate-900">{result.jobId.title}</p>
+                            <p className="text-xs text-slate-500">{new Date(result.createdAt).toLocaleDateString()}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-bold text-blue-600">{result.score}%</p>
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium capitalize ml-2 ${
+                              result.status === 'shortlisted' ? 'bg-green-100 text-green-700' :
+                              result.status === 'interview' ? 'bg-purple-100 text-purple-700' :
+                              result.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                              'bg-yellow-100 text-yellow-700'
+                            }`}>
+                              {result.status}
+                            </span>
+                          </div>
+                        </div>
+                        {result.strengths.length > 0 && (
+                          <div className="mb-2">
+                            <p className="text-xs text-slate-500 mb-1">Strengths:</p>
+                            <div className="flex flex-wrap gap-1">
+                              {result.strengths.slice(0, 3).map((strength, i) => (
+                                <span key={i} className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">{strength}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {result.gaps.length > 0 && (
+                          <div>
+                            <p className="text-xs text-slate-500 mb-1">Gaps:</p>
+                            <div className="flex flex-wrap gap-1">
+                              {result.gaps.slice(0, 2).map((gap, i) => (
+                                <span key={i} className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs">{gap}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

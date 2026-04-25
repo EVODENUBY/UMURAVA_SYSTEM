@@ -4,6 +4,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { useRouter } from 'next/navigation';
 import { User, AuthState, UserRole, ROLES, ROUTES } from '@/lib/types';
 import { API_BASE_URL } from '@/lib/constants';
+import { WebSocketProvider } from './WebSocketContext';
 
 const API_BASE = API_BASE_URL;
 
@@ -214,10 +215,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refreshUser,
     token: state.token,
   };
-  
+
   return (
     <AuthContext.Provider value={value}>
-      {children}
+      <WebSocketProvider
+        token={state.token}
+        userId={state.user?.id}
+        role={state.user?.role}
+      >
+        {children}
+      </WebSocketProvider>
     </AuthContext.Provider>
   );
 }
